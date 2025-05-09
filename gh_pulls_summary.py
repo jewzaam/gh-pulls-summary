@@ -37,8 +37,8 @@ def parse_arguments():
     parser.add_argument("--repo", required=True, help="The name of the repository (e.g., 'vscode').")
     parser.add_argument(
         "--draft-filter",
-        choices=["include-drafts", "exclude-drafts"],
-        help="Filter pull requests based on draft status. Use 'include-drafts' to include only drafts, or 'exclude-drafts' to exclude drafts."
+        choices=["only-drafts", "no-drafts"],
+        help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts."
     )
     return parser.parse_args()
 
@@ -91,10 +91,10 @@ def main():
             print(".", end="", flush=True)
 
             # Apply draft filter if specified
-            if draft_filter == "exclude-drafts" and pr.get("draft", False):
+            if draft_filter == "no-drafts" and pr.get("draft", False):
                 logging.debug(f"Excluding draft PR #{pr['number']}")
                 continue
-            if draft_filter == "include-drafts" and not pr.get("draft", False):
+            if draft_filter == "only-drafts" and not pr.get("draft", False):
                 logging.debug(f"Excluding non-draft PR #{pr['number']}")
                 continue
 

@@ -4,7 +4,7 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ## Features
 - Fetch pull requests from public or private repositories.
-- Filter pull requests based on draft status (`include-drafts`, `exclude-drafts`, or no filter).
+- Filter pull requests based on draft status (`only-drafts`, `no-drafts`, or no filter).
 - Outputs pull request details, including:
   - Date the pull request was marked ready for review.
   - Title and number of the pull request.
@@ -20,11 +20,6 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 ### Running Against a Public Repository (No Authentication)
 You can run the tool against a public repository without authentication. However, note that the GitHub API imposes a rate limit of **60 requests per hour** for unauthenticated requests.
 
-```bash
-python gh_pulls_summary.py --owner <owner> --repo <repo>
-```
-
-Example:
 ```bash
 python gh_pulls_summary.py --owner jewzaam --repo go-ping-pong
 ```
@@ -58,13 +53,13 @@ python gh_pulls_summary.py --owner my-org --repo private-repo
 
 ### Optional Arguments
 - `--draft-filter`: Filter pull requests based on draft status.
-  - `include-drafts`: Include only draft pull requests.
-  - `exclude-drafts`: Exclude draft pull requests.
+  - `only-drafts`: Include only draft pull requests.
+  - `no-drafts`: Exclude draft pull requests.
   - If not specified, all pull requests are included regardless of draft status.
 
 Example:
 ```bash
-python gh_pulls_summary.py --owner jewzaam --repo go-ping-pong --draft-filter exclude-drafts
+python gh_pulls_summary.py --owner jewzaam --repo gh-pulls-summary --draft-filter no-drafts
 ```
 
 ## Output
