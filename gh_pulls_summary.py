@@ -19,7 +19,7 @@ HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28"
 }
 
-if GITHUB_TOKEN:
+if GITHUB_TOKEN: # pragma: no cover
     HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
 

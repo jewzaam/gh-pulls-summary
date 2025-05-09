@@ -10,6 +10,7 @@ from gh_pulls_summary import (
     generate_markdown_output,
     fetch_and_process_pull_requests,
     main,
+    parse_arguments,
 )
 
 # Configure logging for tests
@@ -337,6 +338,25 @@ class TestMainFunction(unittest.TestCase):
 
         # Verify that the output was printed
         mock_print.assert_called_once_with(mock_generate_markdown_output.return_value)
+
+
+class TestParseArguments(unittest.TestCase):
+
+    @patch("sys.argv", ["gh_pulls_summary.py", "--owner", "owner", "--repo", "repo", "--draft-filter", "no-drafts", "--debug"])
+    def test_parse_arguments_with_all_options(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.draft_filter, "no-drafts")
+        self.assertTrue(args.debug)
+
+    @patch("sys.argv", ["gh_pulls_summary.py", "--owner", "owner", "--repo", "repo"])
+    def test_parse_arguments_with_required_options_only(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertIsNone(args.draft_filter)
+        self.assertFalse(args.debug)
 
 
 if __name__ == "__main__":
