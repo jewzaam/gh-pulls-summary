@@ -15,7 +15,7 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ## Requirements
 - Python 3.6 or later.
-- `requests` library (install using `pip install requests`).
+- see `requirements.txt`
 
 ---
 
