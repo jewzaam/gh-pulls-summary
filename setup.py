@@ -8,6 +8,7 @@ setup(
     author="Naveen Malik",
     author_email="jewzaam@gmail.com",
     packages=find_packages(),
+    py_modules=["gh_pulls_summary"],  # Reference the module directly
     install_requires=[
         "requests",
         "argcomplete",

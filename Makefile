@@ -1,4 +1,4 @@
-.PHONY: default test coverage install uninstall
+.PHONY: default test coverage install uninstall install-requirements
 
 # Default target runs both test and coverage
 default: test coverage
@@ -11,8 +11,11 @@ coverage:
 	coverage report -m
 	coverage xml
 
-install:
-	pip install -e .
+install-requirements:
+	pip install --user -r requirements.txt
+
+install: install-requirements
+	pip install --user -e .
 
 uninstall:
 	pip uninstall -y gh-pulls-summary
