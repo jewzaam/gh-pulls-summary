@@ -35,11 +35,11 @@ python gh_pulls_summary.py --owner jewzaam --repo gh-pulls-summary
 ### Running Against a Private Repository (Requires Authentication)
 To access private repositories or increase the API rate limit to **5,000 requests per hour**, you need to authenticate using a GitHub personal access token.
 
-1. **Set Up a GitHub Token**:
-   - Follow the [GitHub documentation on creating a personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) to generate a token.
-   - Ensure the token has the necessary scopes:
-     - `repo` for private repositories.
-     - `read:org` if accessing organization-level data.
+1. **Set Up a classic GitHub Token**:
+   - [Tokens (classic)](https://github.com/settings/tokens)
+   - Select "Generate new token" then "Generate new token (classic)"
+   - Check the scope "repo"
+   - For more info see [GitHub documentation on creating a personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token).   
 
 2. **Set the Token as an Environment Variable**:
    Export the token as an environment variable:
@@ -58,6 +58,8 @@ Example:
 export GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXX
 python gh_pulls_summary.py --owner my-org --repo private-repo
 ```
+
+NOTE the _classic_ scope of `repo` is required for this to work, any other permissions have yet to work corrrectly.  PR's welcome to fix this in docs if there's another way.
 
 ### Optional Arguments
 - `--draft-filter`: Filter pull requests based on draft status.
