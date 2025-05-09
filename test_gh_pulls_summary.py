@@ -1,4 +1,5 @@
 import unittest
+import logging
 from unittest.mock import patch, MagicMock
 from gh_pulls_summary import (
     github_api_request,
@@ -7,6 +8,9 @@ from gh_pulls_summary import (
     fetch_reviews,
     fetch_user_details,
 )
+
+# Configure logging for tests
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 class TestGhPullsSummary(unittest.TestCase):
 
@@ -33,32 +37,41 @@ class TestGhPullsSummary(unittest.TestCase):
 
     @patch("gh_pulls_summary.requests.get")
     def test_fetch_pull_requests(self, mock_get):
-        # Mock pull requests response
-        mock_get.return_value = MagicMock(status_code=200, json=MagicMock(return_value=[{"number": 1}, {"number": 2}]))
+        # Mock paginated responses for pull requests
+        mock_get.side_effect = [
+            MagicMock(status_code=200, json=MagicMock(return_value=[{"number": 1}, {"number": 2}])),
+            MagicMock(status_code=200, json=MagicMock(return_value=[{"number": 3}])),
+            MagicMock(status_code=200, json=MagicMock(return_value=[])),  # No more results
+        ]
 
         result = fetch_pull_requests("owner", "repo")
-        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result), 3)
         self.assertEqual(result[0]["number"], 1)
+        self.assertEqual(result[1]["number"], 2)
+        self.assertEqual(result[2]["number"], 3)
 
     @patch("gh_pulls_summary.requests.get")
     def test_fetch_issue_events(self, mock_get):
-        # Mock issue events response
-        mock_get.return_value = MagicMock(status_code=200, json=MagicMock(return_value=[{"event": "ready_for_review"}]))
+        # Mock paginated responses for issue events
+        mock_get.side_effect = [
+            MagicMock(status_code=200, json=MagicMock(return_value=[{"event": "ready_for_review"}])),
+            MagicMock(status_code=200, json=MagicMock(return_value=[{"event": "labeled"}])),
+            MagicMock(status_code=200, json=MagicMock(return_value=[])),  # No more results
+        ]
 
         result = fetch_issue_events("owner", "repo", 1)
-        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result), 2)
         self.assertEqual(result[0]["event"], "ready_for_review")
+        self.assertEqual(result[1]["event"], "labeled")
 
     @patch("gh_pulls_summary.requests.get")
     def test_fetch_reviews(self, mock_get):
-        # Mock reviews response with multiple states
-        mock_get.return_value = MagicMock(
-            status_code=200,
-            json=MagicMock(return_value=[
-                {"state": "APPROVED"},
-                {"state": "COMMENTED"}
-            ])
-        )
+        # Mock paginated responses for reviews
+        mock_get.side_effect = [
+            MagicMock(status_code=200, json=MagicMock(return_value=[{"state": "APPROVED"}])),
+            MagicMock(status_code=200, json=MagicMock(return_value=[{"state": "COMMENTED"}])),
+            MagicMock(status_code=200, json=MagicMock(return_value=[])),  # No more results
+        ]
 
         result = fetch_reviews("owner", "repo", 1)
         self.assertEqual(len(result), 2)

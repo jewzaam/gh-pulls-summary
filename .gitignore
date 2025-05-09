@@ -21,3 +21,8 @@ Thumbs.db
 venv/
 
 .vscode
+
+# Ignore coverage reports
+coverage.xml
+.coverage
+htmlcov/

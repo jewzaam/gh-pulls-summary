@@ -62,6 +62,9 @@ def github_api_request(endpoint, params=None, use_paging=True):
     all_results = []
     page = 1
 
+    # fail-safe, capture last results and bail if it's the same as the next response
+    last_results = None
+
     while True:
         if use_paging:
             params["page"] = page
@@ -75,6 +78,13 @@ def github_api_request(endpoint, params=None, use_paging=True):
             raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
 
         results = response.json()
+
+        if results == last_results:
+            # something with paging is wrong
+            logging.warning(f"something wrong with paging, got identical results for pages {page-1} and {page}.  bailing early!")
+            return None
+    
+        last_results = results
 
         # Handle cases where the response is a dictionary
         if isinstance(results, dict):
