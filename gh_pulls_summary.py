@@ -1,11 +1,8 @@
 import os
 import requests
-import json
 import sys
 import argparse
 import logging
-from datetime import datetime
-from urllib.parse import urljoin
 
 # Configuration
 PAGE_SIZE = 100
@@ -48,7 +45,7 @@ def configure_logging(debug):
     )
 
 def github_api_request(endpoint, params=None):
-    url = urljoin(GITHUB_API_BASE, endpoint)
+    url = f"{GITHUB_API_BASE}{endpoint}"
     logging.debug(f"Making API request to {url} with params {params}")
     response = requests.get(url, headers=HEADERS, params=params)
     if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
