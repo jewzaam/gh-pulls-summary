@@ -9,7 +9,6 @@ import logging
 import argcomplete
 
 # Configuration
-PAGE_SIZE = 100
 GITHUB_API_BASE = "https://api.github.com"
 
 # Optional GitHub token
@@ -23,7 +22,11 @@ HEADERS = {
 if GITHUB_TOKEN:
     HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
+
 def parse_arguments():
+    """
+    Parses command-line arguments for the script.
+    """
     parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
     parser.add_argument("--owner", required=True, help="The owner of the repository (e.g., 'microsoft').")
     parser.add_argument("--repo", required=True, help="The name of the repository (e.g., 'vscode').")
@@ -42,7 +45,11 @@ def parse_arguments():
     argcomplete.autocomplete(parser)
     return parser.parse_args()
 
+
 def configure_logging(debug):
+    """
+    Configures logging for the script.
+    """
     logging.basicConfig(
         level=logging.DEBUG if debug else logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -50,6 +57,7 @@ def configure_logging(debug):
             logging.StreamHandler(sys.stderr)  # Log to stderr
         ]
     )
+
 
 def github_api_request(endpoint, params=None, use_paging=True):
     """
@@ -61,9 +69,7 @@ def github_api_request(endpoint, params=None, use_paging=True):
 
     all_results = []
     page = 1
-
-    # fail-safe, capture last results and bail if it's the same as the next response
-    last_results = None
+    last_results = None  # Fail-safe to detect duplicate results
 
     while True:
         if use_paging:
@@ -80,11 +86,8 @@ def github_api_request(endpoint, params=None, use_paging=True):
         results = response.json()
 
         if results == last_results:
-            # something with paging is wrong
-            logging.warning(f"something wrong with paging, got identical results for pages {page-1} and {page}.  bailing early!")
+            logging.warning(f"Duplicate results detected for pages {page-1} and {page}. Stopping pagination.")
             return None
-    
-        last_results = results
 
         # Handle cases where the response is a dictionary
         if isinstance(results, dict):
@@ -97,10 +100,13 @@ def github_api_request(endpoint, params=None, use_paging=True):
             break
 
         all_results.extend(results)
+        last_results = results
+
         page += 1
 
     logging.debug(f"Fetched {len(all_results)} items from {endpoint}")
     return all_results
+
 
 def fetch_pull_requests(owner, repo):
     """
@@ -111,6 +117,7 @@ def fetch_pull_requests(owner, repo):
     logging.debug(f"Fetching pull requests for {owner}/{repo}")
     return github_api_request(endpoint, params)
 
+
 def fetch_issue_events(owner, repo, pr_number):
     """
     Fetches all issue events for a specific pull request.
@@ -118,6 +125,7 @@ def fetch_issue_events(owner, repo, pr_number):
     endpoint = f"/repos/{owner}/{repo}/issues/{pr_number}/events"
     logging.debug(f"Fetching issue events for PR #{pr_number}")
     return github_api_request(endpoint)
+
 
 def fetch_reviews(owner, repo, pr_number):
     """
@@ -127,15 +135,20 @@ def fetch_reviews(owner, repo, pr_number):
     logging.debug(f"Fetching reviews for PR #{pr_number}")
     return github_api_request(endpoint)
 
+
 def fetch_user_details(username):
     """
     Fetches details for a specific GitHub user.
     """
     endpoint = f"/users/{username}"
     logging.debug(f"Fetching user details for {username}")
-    return github_api_request(endpoint)
+    return github_api_request(endpoint, use_paging=False)
+
 
 def main():
+    """
+    Main function to fetch and summarize GitHub pull requests.
+    """
     args = parse_arguments()
     owner = args.owner
     repo = args.repo
@@ -182,7 +195,7 @@ def main():
 
         # Fetch author details
         author_details = fetch_user_details(pr_author)
-        pr_author_name = author_details.get("name", pr_author)
+        pr_author_name = author_details.get("name")
         pr_author_url = author_details.get("html_url")
 
         # Fetch reviews and approvals
@@ -210,6 +223,7 @@ def main():
     print("| --- | --- | --- | --- | --- |")
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
         print(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
+
 
 if __name__ == "__main__":
     main()
