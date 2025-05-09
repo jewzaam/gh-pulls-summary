@@ -227,7 +227,7 @@ def generate_markdown_output(pull_requests):
     return "\n".join(output)
 
 
-def main():  # pragma: no cover
+def main():
     """
     Main function to fetch and summarize GitHub pull requests.
     """
