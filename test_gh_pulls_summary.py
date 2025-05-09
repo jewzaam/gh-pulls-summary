@@ -183,6 +183,62 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
         mock_fetch_user_details.assert_called_once_with("johndoe")
         mock_fetch_reviews.assert_called_once_with("owner", "repo", 1)
 
+    @patch("gh_pulls_summary.fetch_pull_requests")
+    @patch("gh_pulls_summary.fetch_issue_events")
+    @patch("gh_pulls_summary.fetch_user_details")
+    @patch("gh_pulls_summary.fetch_reviews")
+    def test_pr_ready_date_not_set(self, mock_fetch_reviews, mock_fetch_user_details, mock_fetch_issue_events, mock_fetch_pull_requests):
+        # Mock pull requests
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 1,
+                "title": "Add feature X",
+                "user": {"login": "johndoe"},
+                "html_url": "https://github.com/owner/repo/pull/1",
+                "draft": False,
+                "created_at": "2025-05-01T12:00:00Z"
+            }
+        ]
+
+        # Mock issue events (no "ready_for_review" event)
+        mock_fetch_issue_events.return_value = []
+
+        # Mock user details
+        mock_fetch_user_details.return_value = {
+            "name": "John Doe",
+            "html_url": "https://github.com/johndoe"
+        }
+
+        # Mock reviews
+        mock_fetch_reviews.return_value = [
+            {"user": {"login": "reviewer1"}, "state": "APPROVED"},
+            {"user": {"login": "reviewer2"}, "state": "COMMENTED"}
+        ]
+
+        # Call the function
+        result = fetch_and_process_pull_requests("owner", "repo", draft_filter=None)
+
+        # Verify the result
+        expected_result = [
+            {
+                "date": "2025-05-01",  # Falls back to created_at date
+                "title": "Add feature X",
+                "number": 1,
+                "url": "https://github.com/owner/repo/pull/1",
+                "author_name": "John Doe",
+                "author_url": "https://github.com/johndoe",
+                "reviews": 2,
+                "approvals": 1
+            }
+        ]
+        self.assertEqual(result, expected_result)
+
+        # Verify mocks were called
+        mock_fetch_pull_requests.assert_called_once_with("owner", "repo")
+        mock_fetch_issue_events.assert_called_once_with("owner", "repo", 1)
+        mock_fetch_user_details.assert_called_once_with("johndoe")
+        mock_fetch_reviews.assert_called_once_with("owner", "repo", 1)
+
 
 if __name__ == "__main__":
     unittest.main()
