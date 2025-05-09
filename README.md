@@ -21,7 +21,7 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 You can run the tool against a public repository without authentication. However, note that the GitHub API imposes a rate limit of **60 requests per hour** for unauthenticated requests.
 
 ```bash
-python [gh_pulls_summary.py](http://_vscodecontentref_/1) --owner jewzaam --repo go-ping-pong
+python gh_pulls_summary.py --owner jewzaam --repo gh-pulls-summary
 ```
 
 ### Running Against a Private Repository (Requires Authentication)
@@ -60,6 +60,13 @@ python gh_pulls_summary.py --owner my-org --repo private-repo
 Example:
 ```bash
 python gh_pulls_summary.py --owner jewzaam --repo gh-pulls-summary --draft-filter no-drafts
+```
+
+- `--debug`: Enable debug logging to output detailed information about the script's execution.
+
+Example:
+```bash
+python gh_pulls_summary.py --owner jewzaam --repo gh-pulls-summary --debug
 ```
 
 ## Output

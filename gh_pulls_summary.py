@@ -22,15 +22,6 @@ HEADERS = {
 if GITHUB_TOKEN:
     HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stderr)  # Log to stderr
-    ]
-)
-
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
     parser.add_argument("--owner", required=True, help="The owner of the repository (e.g., 'microsoft').")
@@ -40,7 +31,21 @@ def parse_arguments():
         choices=["only-drafts", "no-drafts"],
         help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts."
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging."
+    )
     return parser.parse_args()
+
+def configure_logging(debug):
+    logging.basicConfig(
+        level=logging.DEBUG if debug else logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stderr)  # Log to stderr
+        ]
+    )
 
 def github_api_request(endpoint, params=None):
     url = urljoin(GITHUB_API_BASE, endpoint)
@@ -55,20 +60,24 @@ def github_api_request(endpoint, params=None):
 def fetch_pull_requests(owner, repo, page):
     endpoint = f"/repos/{owner}/{repo}/pulls"
     params = {"state": "open", "per_page": PAGE_SIZE, "page": page}
+    logging.debug(f"Fetching pull requests from {owner}/{repo}, page {page}")
     return github_api_request(endpoint, params)
 
 def fetch_issue_events(owner, repo, pr_number, page):
     endpoint = f"/repos/{owner}/{repo}/issues/{pr_number}/events"
     params = {"per_page": PAGE_SIZE, "page": page}
+    logging.debug(f"Fetching issue events for PR #{pr_number}, page {page}")
     return github_api_request(endpoint, params)
 
 def fetch_reviews(owner, repo, pr_number):
     endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
     params = {"per_page": PAGE_SIZE}
+    logging.debug(f"Fetching reviews for PR #{pr_number}")
     return github_api_request(endpoint, params)
 
 def fetch_user_details(username):
     endpoint = f"/users/{username}"
+    logging.debug(f"Fetching user details for {username}")
     return github_api_request(endpoint)
 
 def main():
@@ -76,9 +85,11 @@ def main():
     owner = args.owner
     repo = args.repo
     draft_filter = args.draft_filter
+    configure_logging(args.debug)
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
 
     page = 1
+    logging.debug("Starting to fetch pull requests...")
     pull_requests = []
     print("Loading pull request data...", end="", flush=True)
 
@@ -88,6 +99,7 @@ def main():
             break
 
         for pr in prs:
+            logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
             print(".", end="", flush=True)
 
             # Apply draft filter if specified
@@ -113,6 +125,7 @@ def main():
                 for event in events:
                     if event["event"] == "ready_for_review":
                         event_date = event["created_at"]
+                        logging.debug(f"PR #{pr_number} marked ready for review on {event_date}")
                         if not pr_ready_date or event_date > pr_ready_date:
                             pr_ready_date = event_date
                 events_page += 1
@@ -130,6 +143,7 @@ def main():
             reviews = fetch_reviews(owner, repo, pr_number)
             pr_reviews_count = len(reviews)
             pr_reviews = len(set(review["user"]["login"] for review in reviews))
+            logging.debug(f"PR #{pr_number} has {pr_reviews_count} reviews, {pr_reviews} unique reviewers")
             pr_approvals = len(set(review["user"]["login"] for review in reviews if review["state"] == "APPROVED"))
 
             if pr_reviews_count == PAGE_SIZE:
@@ -151,6 +165,7 @@ def main():
     print("")  # New line after loading dots
 
     # Output as Markdown
+    logging.debug("Generating Markdown output for pull requests")
     print("| Date 🔽 | Title | Author | Reviews | Approvals |")
     print("| --- | --- | --- | --- | --- |")
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
