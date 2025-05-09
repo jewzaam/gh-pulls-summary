@@ -225,5 +225,5 @@ def main(): # pragma: no cover
         print(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     main()
