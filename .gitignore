@@ -1,0 +1,21 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables and secrets
+.env
+
+# Temporary files
+*.tmp
+*.log
+*.out
+*.bak
+*.swp
+
+# System-specific files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
