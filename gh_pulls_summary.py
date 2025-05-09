@@ -145,22 +145,17 @@ def fetch_user_details(username):
     return github_api_request(endpoint, use_paging=False)
 
 
-def main(): # pragma: no cover
+def fetch_and_process_pull_requests(owner, repo, draft_filter):
     """
-    Main function to fetch and summarize GitHub pull requests.
+    Fetches and processes pull requests for the specified repository.
+    Returns a list of processed pull request data.
     """
-    args = parse_arguments()
-    owner = args.owner
-    repo = args.repo
-    draft_filter = args.draft_filter
-    configure_logging(args.debug)
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
-
-    logging.debug("Starting to fetch pull requests...")
     pull_requests = []
     print("Loading pull request data...", end="", flush=True)
 
     prs = fetch_pull_requests(owner, repo)
+
     for pr in prs:
         logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
         print(".", end="", flush=True)
@@ -215,15 +210,35 @@ def main(): # pragma: no cover
             "approvals": pr_approvals
         })
 
-    print("")  # New line after loading dots
+    return pull_requests
 
-    # Output as Markdown
+
+def generate_markdown_output(pull_requests):
+    """
+    Generates Markdown output for the given list of pull requests.
+    Returns the Markdown string.
+    """
     logging.debug("Generating Markdown output for pull requests")
-    print("| Date 🔽 | Title | Author | Reviews | Approvals |")
-    print("| --- | --- | --- | --- | --- |")
+    output = []
+    output.append("| Date 🔽 | Title | Author | Reviews | Approvals |")
+    output.append("| --- | --- | --- | --- | --- |")
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
-        print(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
+        output.append(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
+    return "\n".join(output)
 
 
-if __name__ == "__main__": # pragma: no cover
+def main():  # pragma: no cover
+    """
+    Main function to fetch and summarize GitHub pull requests.
+    """
+    args = parse_arguments()
+    configure_logging(args.debug)
+
+    pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter)
+    markdown_output = generate_markdown_output(pull_requests)
+
+    print(markdown_output)
+
+
+if __name__ == "__main__":  # pragma: no cover
     main()
