@@ -15,6 +15,14 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 - Python 3.6 or later.
 - `requests` library (install using `pip install requests`).
 
+### Bash Completion (optional)
+
+This uses argcomplete with argparse.  See https://kislyuk.github.io/argcomplete/ for more info.
+
+```bash
+activate-global-python-argcomplete
+```
+
 ## Usage
 
 ### Running Against a Public Repository (No Authentication)

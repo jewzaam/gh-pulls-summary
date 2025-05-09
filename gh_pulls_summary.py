@@ -1,8 +1,12 @@
+#!/usr/bin/env python
+# PYTHON_ARGCOMPLETE_OK
+
 import os
 import requests
 import sys
 import argparse
 import logging
+import argcomplete
 
 # Configuration
 PAGE_SIZE = 100
@@ -33,6 +37,9 @@ def parse_arguments():
         action="store_true",
         help="Enable debug logging."
     )
+
+    # Enable tab completion
+    argcomplete.autocomplete(parser)
     return parser.parse_args()
 
 def configure_logging(debug):
@@ -44,10 +51,10 @@ def configure_logging(debug):
         ]
     )
 
-def github_api_request(endpoint, params=None):
+def github_api_request(endpoint, params=None, use_paging=True):
     """
-    Makes a GitHub API request and handles pagination internally.
-    Returns all results across all pages.
+    Makes a GitHub API request and optionally handles pagination.
+    Returns all results across all pages if pagination is enabled.
     """
     if params is None:
         params = {}
@@ -56,7 +63,8 @@ def github_api_request(endpoint, params=None):
     page = 1
 
     while True:
-        params["page"] = page
+        if use_paging:
+            params["page"] = page
         url = f"{GITHUB_API_BASE}{endpoint}"
         logging.debug(f"Making API request to {url} with params {params}")
         response = requests.get(url, headers=HEADERS, params=params)
@@ -67,7 +75,15 @@ def github_api_request(endpoint, params=None):
             raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
 
         results = response.json()
-        if not results:
+
+        # Handle cases where the response is a dictionary
+        if isinstance(results, dict):
+            logging.debug(f"Response is a dictionary: {results}")
+            return results
+
+        # Handle cases where the response is a list
+        if not results or not use_paging:
+            all_results.extend(results)
             break
 
         all_results.extend(results)
