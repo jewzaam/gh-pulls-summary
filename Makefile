@@ -1,4 +1,7 @@
-.PHONY: test coverage
+.PHONY: default test coverage
+
+# Default target runs both test and coverage
+default: test coverage
 
 test:
 	python -m unittest discover -s . -p "test_*.py"
