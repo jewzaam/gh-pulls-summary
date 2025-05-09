@@ -9,7 +9,6 @@ from urllib.parse import urljoin
 
 # Configuration
 PAGE_SIZE = 100
-SKIP_DRAFT = True
 GITHUB_API_BASE = "https://api.github.com"
 
 # Optional GitHub token
@@ -36,6 +35,11 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
     parser.add_argument("--owner", required=True, help="The owner of the repository (e.g., 'microsoft').")
     parser.add_argument("--repo", required=True, help="The name of the repository (e.g., 'vscode').")
+    parser.add_argument(
+        "--draft-filter",
+        choices=["include-drafts", "exclude-drafts"],
+        help="Filter pull requests based on draft status. Use 'include-drafts' to include only drafts, or 'exclude-drafts' to exclude drafts."
+    )
     return parser.parse_args()
 
 def github_api_request(endpoint, params=None):
@@ -71,6 +75,7 @@ def main():
     args = parse_arguments()
     owner = args.owner
     repo = args.repo
+    draft_filter = args.draft_filter
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
 
     page = 1
@@ -85,8 +90,12 @@ def main():
         for pr in prs:
             print(".", end="", flush=True)
 
-            if SKIP_DRAFT and pr.get("draft", False):
-                logging.debug(f"Skipping draft PR #{pr['number']}")
+            # Apply draft filter if specified
+            if draft_filter == "exclude-drafts" and pr.get("draft", False):
+                logging.debug(f"Excluding draft PR #{pr['number']}")
+                continue
+            if draft_filter == "include-drafts" and not pr.get("draft", False):
+                logging.debug(f"Excluding non-draft PR #{pr['number']}")
                 continue
 
             pr_number = pr["number"]
