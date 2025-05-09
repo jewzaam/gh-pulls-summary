@@ -21,7 +21,7 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 You can run the tool against a public repository without authentication. However, note that the GitHub API imposes a rate limit of **60 requests per hour** for unauthenticated requests.
 
 ```bash
-python gh_pulls_summary.py --owner jewzaam --repo go-ping-pong
+python [gh_pulls_summary.py](http://_vscodecontentref_/1) --owner jewzaam --repo go-ping-pong
 ```
 
 ### Running Against a Private Repository (Requires Authentication)
@@ -82,5 +82,3 @@ Example Output:
 - For unauthenticated requests, ensure you stay within the GitHub API's rate limits.
 - For private repositories, ensure your token has the appropriate permissions.
 
-## License
-This project is licensed under the MIT License.
