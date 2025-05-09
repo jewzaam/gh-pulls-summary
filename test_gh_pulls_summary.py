@@ -11,6 +11,7 @@ from gh_pulls_summary import (
     fetch_and_process_pull_requests,
     main,
     parse_arguments,
+    get_repo_and_owner_from_git,
 )
 
 # Configure logging for tests
@@ -355,6 +356,33 @@ class TestParseArguments(unittest.TestCase):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
         self.assertEqual(args.repo, "repo")
+        self.assertIsNone(args.draft_filter)
+        self.assertFalse(args.debug)
+
+    @patch("gh_pulls_summary.get_repo_and_owner_from_git")
+    @patch("sys.argv", ["gh_pulls_summary.py"])
+    def test_parse_arguments_with_git_metadata(self, mock_get_repo_and_owner_from_git):
+        # Mock Git metadata
+        mock_get_repo_and_owner_from_git.return_value = ("mock_owner", "mock_repo")
+
+        # Call parse_arguments
+        args = parse_arguments()
+
+        # Verify the parsed arguments
+        self.assertEqual(args.owner, "mock_owner")
+        self.assertEqual(args.repo, "mock_repo")
+        self.assertIsNone(args.draft_filter)
+        self.assertFalse(args.debug)
+
+    @patch("gh_pulls_summary.get_repo_and_owner_from_git", return_value=(None, None))
+    @patch("sys.argv", ["gh_pulls_summary.py"])
+    def test_parse_arguments_without_git_metadata(self, mock_get_repo_and_owner_from_git):
+        # Call parse_arguments
+        args = parse_arguments()
+
+        # Verify the parsed arguments
+        self.assertIsNone(args.owner)
+        self.assertIsNone(args.repo)
         self.assertIsNone(args.draft_filter)
         self.assertFalse(args.debug)
 

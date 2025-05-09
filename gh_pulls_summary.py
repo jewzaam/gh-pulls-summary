@@ -7,6 +7,7 @@ import sys
 import argparse
 import logging
 import argcomplete
+import subprocess
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -23,13 +24,49 @@ if GITHUB_TOKEN: # pragma: no cover
     HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
 
+def get_repo_and_owner_from_git():
+    """
+    Retrieves the repository and owner from the local Git configuration.
+    Returns a tuple (owner, repo) or (None, None) if not found.
+    """
+    try:
+        # Get the remote URL
+        remote_url = subprocess.check_output(
+            ["git", "config", "--get", "remote.origin.url"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+
+        # Parse the remote URL to extract owner and repo
+        if remote_url.startswith("git@"):
+            # SSH URL (e.g., git@github.com:owner/repo.git)
+            _, path = remote_url.split(":", 1)
+        elif remote_url.startswith("https://"):
+            # HTTPS URL (e.g., https://github.com/owner/repo.git)
+            path = remote_url.split("/", 3)[-1]
+        else:
+            return None, None
+
+        # Remove the `.git` suffix if present
+        if path.endswith(".git"):
+            path = path[:-4]
+
+        owner, repo = path.split("/", 1)
+        return owner, repo
+    except Exception:
+        return None, None
+
+
 def parse_arguments():
     """
     Parses command-line arguments for the script.
     """
+    # Get default owner and repo from Git metadata
+    default_owner, default_repo = get_repo_and_owner_from_git()
+
     parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
-    parser.add_argument("--owner", required=True, help="The owner of the repository (e.g., 'microsoft').")
-    parser.add_argument("--repo", required=True, help="The name of the repository (e.g., 'vscode').")
+    parser.add_argument("--owner", default=default_owner, help="The owner of the repository (e.g., 'microsoft').")
+    parser.add_argument("--repo", default=default_repo, help="The name of the repository (e.g., 'vscode').")
     parser.add_argument(
         "--draft-filter",
         choices=["only-drafts", "no-drafts"],
@@ -232,6 +269,11 @@ def main():
     Main function to fetch and summarize GitHub pull requests.
     """
     args = parse_arguments()
+
+    # Ensure owner and repo are provided
+    if not args.owner or not args.repo:
+        raise ValueError("Repository owner and name must be specified, either via arguments or local Git metadata.")
+
     configure_logging(args.debug)
 
     pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter)
