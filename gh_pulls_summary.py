@@ -1,43 +1,49 @@
 import os
 import requests
 import json
+import sys
+import argparse
+import logging
 from datetime import datetime
 from urllib.parse import urljoin
 
 # Configuration
-DEBUG = False
 PAGE_SIZE = 100
 SKIP_DRAFT = True
 GITHUB_API_BASE = "https://api.github.com"
 
-# Replace with your GitHub token
+# Optional GitHub token
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # Set this in your environment variables
 
-if not GITHUB_TOKEN:
-    raise Exception("GITHUB_TOKEN environment variable is not set.")
-
 HEADERS = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28"
 }
 
-def debug(message):
-    if DEBUG:
-        print(f"DEBUG: {message}")
+if GITHUB_TOKEN:
+    HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
-def get_owner_and_repo():
-    # Replace this with your repository details
-    # Example: "owner/repo"
-    repo_url = os.getenv("REPO_URL")  # Set this in your environment variables
-    if not repo_url:
-        raise Exception("REPO_URL environment variable is not set.")
-    owner, repo = repo_url.split("/")[-2:]
-    return owner, repo
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stderr)  # Log to stderr
+    ]
+)
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
+    parser.add_argument("--owner", required=True, help="The owner of the repository (e.g., 'microsoft').")
+    parser.add_argument("--repo", required=True, help="The name of the repository (e.g., 'vscode').")
+    return parser.parse_args()
 
 def github_api_request(endpoint, params=None):
     url = urljoin(GITHUB_API_BASE, endpoint)
+    logging.debug(f"Making API request to {url} with params {params}")
     response = requests.get(url, headers=HEADERS, params=params)
+    if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
+        raise Exception("Rate limit exceeded. Consider using a GitHub token to increase the limit.")
     if response.status_code != 200:
         raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
     return response.json()
@@ -62,8 +68,10 @@ def fetch_user_details(username):
     return github_api_request(endpoint)
 
 def main():
-    owner, repo = get_owner_and_repo()
-    debug(f"OWNER={owner}, REPO={repo}")
+    args = parse_arguments()
+    owner = args.owner
+    repo = args.repo
+    logging.info(f"Fetching pull requests for repository {owner}/{repo}")
 
     page = 1
     pull_requests = []
@@ -78,7 +86,7 @@ def main():
             print(".", end="", flush=True)
 
             if SKIP_DRAFT and pr.get("draft", False):
-                debug(f"SKIPPING draft PR_NUMBER={pr['number']}")
+                logging.debug(f"Skipping draft PR #{pr['number']}")
                 continue
 
             pr_number = pr["number"]
@@ -116,7 +124,7 @@ def main():
             pr_approvals = len(set(review["user"]["login"] for review in reviews if review["state"] == "APPROVED"))
 
             if pr_reviews_count == PAGE_SIZE:
-                print(f"WARNING: PR #{pr_number} has {pr_reviews_count} reviews and may have exceeded page limit.")
+                logging.warning(f"PR #{pr_number} has {pr_reviews_count} reviews and may have exceeded page limit.")
 
             pull_requests.append({
                 "date": pr_ready_date,
