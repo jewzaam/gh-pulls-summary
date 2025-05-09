@@ -99,3 +99,33 @@ Example Output:
 - For unauthenticated requests, ensure you stay within the GitHub API's rate limits.
 - For private repositories, ensure your token has the appropriate permissions.
 
+## Running Tests
+
+To ensure the functionality of the tool, unit tests are included. You can run the tests using the provided `Makefile`.
+
+### Prerequisites
+- Ensure you have `make` installed on your system.
+- Python 3.6 or later is required.
+
+### Running Tests
+To run the tests, execute the following command in the terminal:
+
+```bash
+make test
+```
+
+This will discover and run all unit tests in the project that match the pattern `test_*.py`.
+
+### Example Output
+If all tests pass, you will see output similar to this:
+
+```plaintext
+...
+----------------------------------------------------------------------
+Ran 6 tests in 0.123s
+
+OK
+```
+
+If any tests fail, the output will include details about the failures or errors.
+
