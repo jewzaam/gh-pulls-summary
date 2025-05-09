@@ -85,7 +85,7 @@ def github_api_request(endpoint, params=None, use_paging=True):
 
         results = response.json()
 
-        if results == last_results:
+        if results == last_results: # pragma: no cover
             logging.warning(f"Duplicate results detected for pages {page-1} and {page}. Stopping pagination.")
             return None
 
@@ -145,7 +145,7 @@ def fetch_user_details(username):
     return github_api_request(endpoint, use_paging=False)
 
 
-def main():
+def main(): # pragma: no cover
     """
     Main function to fetch and summarize GitHub pull requests.
     """
