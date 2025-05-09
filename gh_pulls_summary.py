@@ -157,6 +157,7 @@ def main():
         # Fetch author details
         author_details = fetch_user_details(pr_author)
         pr_author_name = author_details.get("name", pr_author)
+        pr_author_url = author_details.get("html_url")
 
         # Fetch reviews and approvals
         reviews = fetch_reviews(owner, repo, pr_number)
@@ -170,7 +171,7 @@ def main():
             "number": pr_number,
             "url": pr_url,
             "author_name": pr_author_name,
-            "author_login": pr_author,
+            "author_url": pr_author_url,
             "reviews": pr_reviews,
             "approvals": pr_approvals
         })
@@ -182,7 +183,7 @@ def main():
     print("| Date 🔽 | Title | Author | Reviews | Approvals |")
     print("| --- | --- | --- | --- | --- |")
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
-        print(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}](https://github.com/{pr['author_login']}) | {pr['reviews']} | {pr['approvals']} |")
+        print(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
 
 if __name__ == "__main__":
     main()
