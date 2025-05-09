@@ -45,34 +45,66 @@ def configure_logging(debug):
     )
 
 def github_api_request(endpoint, params=None):
-    url = f"{GITHUB_API_BASE}{endpoint}"
-    logging.debug(f"Making API request to {url} with params {params}")
-    response = requests.get(url, headers=HEADERS, params=params)
-    if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
-        raise Exception("Rate limit exceeded. Consider using a GitHub token to increase the limit.")
-    if response.status_code != 200:
-        raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
-    return response.json()
+    """
+    Makes a GitHub API request and handles pagination internally.
+    Returns all results across all pages.
+    """
+    if params is None:
+        params = {}
 
-def fetch_pull_requests(owner, repo, page):
+    all_results = []
+    page = 1
+
+    while True:
+        params["page"] = page
+        url = f"{GITHUB_API_BASE}{endpoint}"
+        logging.debug(f"Making API request to {url} with params {params}")
+        response = requests.get(url, headers=HEADERS, params=params)
+
+        if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
+            raise Exception("Rate limit exceeded. Consider using a GitHub token to increase the limit.")
+        if response.status_code != 200:
+            raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
+
+        results = response.json()
+        if not results:
+            break
+
+        all_results.extend(results)
+        page += 1
+
+    logging.debug(f"Fetched {len(all_results)} items from {endpoint}")
+    return all_results
+
+def fetch_pull_requests(owner, repo):
+    """
+    Fetches all open pull requests for the specified repository.
+    """
     endpoint = f"/repos/{owner}/{repo}/pulls"
-    params = {"state": "open", "per_page": PAGE_SIZE, "page": page}
-    logging.debug(f"Fetching pull requests from {owner}/{repo}, page {page}")
+    params = {"state": "open"}
+    logging.debug(f"Fetching pull requests for {owner}/{repo}")
     return github_api_request(endpoint, params)
 
-def fetch_issue_events(owner, repo, pr_number, page):
+def fetch_issue_events(owner, repo, pr_number):
+    """
+    Fetches all issue events for a specific pull request.
+    """
     endpoint = f"/repos/{owner}/{repo}/issues/{pr_number}/events"
-    params = {"per_page": PAGE_SIZE, "page": page}
-    logging.debug(f"Fetching issue events for PR #{pr_number}, page {page}")
-    return github_api_request(endpoint, params)
+    logging.debug(f"Fetching issue events for PR #{pr_number}")
+    return github_api_request(endpoint)
 
 def fetch_reviews(owner, repo, pr_number):
+    """
+    Fetches all reviews for a specific pull request.
+    """
     endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
-    params = {"per_page": PAGE_SIZE}
     logging.debug(f"Fetching reviews for PR #{pr_number}")
-    return github_api_request(endpoint, params)
+    return github_api_request(endpoint)
 
 def fetch_user_details(username):
+    """
+    Fetches details for a specific GitHub user.
+    """
     endpoint = f"/users/{username}"
     logging.debug(f"Fetching user details for {username}")
     return github_api_request(endpoint)
@@ -85,79 +117,63 @@ def main():
     configure_logging(args.debug)
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
 
-    page = 1
     logging.debug("Starting to fetch pull requests...")
     pull_requests = []
     print("Loading pull request data...", end="", flush=True)
 
-    while True:
-        prs = fetch_pull_requests(owner, repo, page)
-        if not prs:
-            break
+    prs = fetch_pull_requests(owner, repo)
+    for pr in prs:
+        logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
+        print(".", end="", flush=True)
 
-        for pr in prs:
-            logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
-            print(".", end="", flush=True)
+        # Apply draft filter if specified
+        if draft_filter == "no-drafts" and pr.get("draft", False):
+            logging.debug(f"Excluding draft PR #{pr['number']}")
+            continue
+        if draft_filter == "only-drafts" and not pr.get("draft", False):
+            logging.debug(f"Excluding non-draft PR #{pr['number']}")
+            continue
 
-            # Apply draft filter if specified
-            if draft_filter == "no-drafts" and pr.get("draft", False):
-                logging.debug(f"Excluding draft PR #{pr['number']}")
-                continue
-            if draft_filter == "only-drafts" and not pr.get("draft", False):
-                logging.debug(f"Excluding non-draft PR #{pr['number']}")
-                continue
+        pr_number = pr["number"]
+        pr_title = pr["title"]
+        pr_author = pr["user"]["login"]
+        pr_url = pr["html_url"]
 
-            pr_number = pr["number"]
-            pr_title = pr["title"]
-            pr_author = pr["user"]["login"]
-            pr_url = pr["html_url"]
+        # Determine when the PR was last marked as ready for review
+        pr_ready_date = None
+        events = fetch_issue_events(owner, repo, pr_number)
+        for event in events:
+            if event["event"] == "ready_for_review":
+                event_date = event["created_at"]
+                logging.debug(f"PR #{pr_number} marked ready for review on {event_date}")
+                if not pr_ready_date or event_date > pr_ready_date:
+                    pr_ready_date = event_date
 
-            # Determine when the PR was last marked as ready for review
-            pr_ready_date = None
-            events_page = 1
-            while True:
-                events = fetch_issue_events(owner, repo, pr_number, events_page)
-                if not events:
-                    break
-                for event in events:
-                    if event["event"] == "ready_for_review":
-                        event_date = event["created_at"]
-                        logging.debug(f"PR #{pr_number} marked ready for review on {event_date}")
-                        if not pr_ready_date or event_date > pr_ready_date:
-                            pr_ready_date = event_date
-                events_page += 1
+        if not pr_ready_date:
+            pr_ready_date = pr["created_at"]
 
-            if not pr_ready_date:
-                pr_ready_date = pr["created_at"]
+        pr_ready_date = pr_ready_date.split("T")[0]
 
-            pr_ready_date = pr_ready_date.split("T")[0]
+        # Fetch author details
+        author_details = fetch_user_details(pr_author)
+        pr_author_name = author_details.get("name", pr_author)
 
-            # Fetch author details
-            author_details = fetch_user_details(pr_author)
-            pr_author_name = author_details.get("name", pr_author)
+        # Fetch reviews and approvals
+        reviews = fetch_reviews(owner, repo, pr_number)
+        pr_reviews = len(set(review["user"]["login"] for review in reviews))
+        logging.debug(f"PR #{pr_number} has {len(reviews)} reviews, {pr_reviews} unique reviewers")
+        pr_approvals = len(set(review["user"]["login"] for review in reviews if review["state"] == "APPROVED"))
 
-            # Fetch reviews and approvals
-            reviews = fetch_reviews(owner, repo, pr_number)
-            pr_reviews_count = len(reviews)
-            pr_reviews = len(set(review["user"]["login"] for review in reviews))
-            logging.debug(f"PR #{pr_number} has {pr_reviews_count} reviews, {pr_reviews} unique reviewers")
-            pr_approvals = len(set(review["user"]["login"] for review in reviews if review["state"] == "APPROVED"))
-
-            if pr_reviews_count == PAGE_SIZE:
-                logging.warning(f"PR #{pr_number} has {pr_reviews_count} reviews and may have exceeded page limit.")
-
-            pull_requests.append({
-                "date": pr_ready_date,
-                "title": pr_title,
-                "number": pr_number,
-                "url": pr_url,
-                "author_name": pr_author_name,
-                "author_login": pr_author,
-                "reviews": pr_reviews,
-                "approvals": pr_approvals
-            })
-
-        page += 1
+        pull_requests.append({
+            "date": pr_ready_date,
+            "title": pr_title,
+            "number": pr_number,
+            "url": pr_url,
+            "author_name": pr_author_name,
+            "author_login": pr_author,
+            "reviews": pr_reviews,
+            "approvals": pr_approvals
+        })
 
     print("")  # New line after loading dots
 
