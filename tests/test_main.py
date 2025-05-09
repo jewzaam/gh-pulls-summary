@@ -1,6 +1,10 @@
 import unittest
+import logging
 from unittest.mock import patch, MagicMock
 from gh_pulls_summary import main
+
+# Configure logging for tests
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 class TestMainFunction(unittest.TestCase):
 

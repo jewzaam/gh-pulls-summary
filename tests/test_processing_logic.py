@@ -1,6 +1,10 @@
 import unittest
+import logging
 from unittest.mock import patch, MagicMock
 from gh_pulls_summary import fetch_and_process_pull_requests, generate_markdown_output
+
+# Configure logging for tests
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 class TestProcessingLogic(unittest.TestCase):
 
@@ -55,6 +59,39 @@ class TestProcessingLogic(unittest.TestCase):
             }
         ]
         self.assertEqual(result, expected_result)
+
+    def test_generate_markdown_output(self):
+        pull_requests = [
+            {
+                "date": "2025-05-02",
+                "title": "Fix bug Y",
+                "number": 124,
+                "url": "https://github.com/owner/repo/pull/124",
+                "author_name": "Jane Smith",
+                "author_url": "https://github.com/janesmith",
+                "reviews": 1,
+                "approvals": 1
+            },
+            {
+                "date": "2025-05-01",
+                "title": "Add feature X",
+                "number": 123,
+                "url": "https://github.com/owner/repo/pull/123",
+                "author_name": "John Doe",
+                "author_url": "https://github.com/johndoe",
+                "reviews": 3,
+                "approvals": 2
+            }
+        ]
+
+        expected_output = (
+            "| Date 🔽 | Title | Author | Reviews | Approvals |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |\n"
+            "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 1 | 1 |"
+        )
+
+        self.assertEqual(generate_markdown_output(pull_requests), expected_output)
 
 if __name__ == "__main__":
     unittest.main()
