@@ -1,0 +1,150 @@
+#!/bin/bash
+
+DEBUG=false
+PAGE_SIZE=100
+SKIP_DRAFT=true
+
+TEMP_DIR=`mktemp -d`
+trap "rm -rf $TEMP_DIR" EXIT
+OUTPUT_FILENAME=$TEMP_DIR/summary.out
+
+function debug {
+    if [ "$DEBUG" == "true" ];
+    then
+        echo "DEBUG: $@"
+    fi
+}
+
+debug "TEMP_DIR=$TEMP_DIR"
+
+
+# verify logged in
+gh api --method GET /octocat \
+--header 'Accept: application/vnd.github+json' \
+--header "X-GitHub-Api-Version: 2022-11-28" 1>&2 || exit -2
+
+# ASSUMPTION: the 'origin' remote is the main upstream
+UPSTREAM_REMOTE=origin
+
+# figure out "owner" (organization/user) from remote
+OWNER=$(git remote -v | grep $UPSTREAM_REMOTE | grep fetch | sed 's|.*[:/]\([^/]*\)/.*|\1|g')
+
+# figure out repo from remote
+REPO=$(git remote -v | grep $OWNER | grep fetch | sed 's|.*\/\(.*\).git .*|\1|g')
+
+debug "OWNER=$OWNER, REPO=$REPO"
+
+PAGE=1
+# loop over pages
+echo -n "Loading pull request data.." 1>&2
+while true
+do
+    debug "pulling PR page=$PAGE"
+
+    # get PRs
+    gh api -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "/repos/$OWNER/$REPO/pulls?state=open&per_page=$PAGE_SIZE&page=$PAGE" | jq -r '.' > $TEMP_DIR/pulls.json
+
+    # did we get any PRs?  if not, we've processed everything
+    if [ "$(jq -r '. | length' $TEMP_DIR/pulls.json)" == "0" ];
+    then
+        # we're done, yay
+        break
+    fi
+
+    # for each PR
+    for PR_NUMBER in $(jq -r '.[].number' $TEMP_DIR/pulls.json);
+    do
+        # print a dot for every PR so there's some visual feedback on the screen
+        echo -n "." 1>&2
+
+        # the .number property is an integer, not string
+        if [ "$SKIP_DRAFT" == "true" ];
+        then
+            IS_DRAFT=$(jq -r ".[] | select(.number == $PR_NUMBER) | .draft" $TEMP_DIR/pulls.json)
+
+            if [ "$IS_DRAFT" == "true" ];
+            then
+                # skip draft
+                debug "SKIPPING draft PR_NUMBER=$PR_NUMBER"
+                continue
+            fi
+        fi
+
+        # all these are open PRs
+        
+        # when did it _last_ get marked as ready for review?
+        PR_PAGE=1
+        PR_READY_DATE=""
+        while true
+        do
+            gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$OWNER/$REPO/issues/$PR_NUMBER/events?per_page=$PAGE_SIZE&page=$PR_PAGE" | jq -r '.' > $TEMP_DIR/events-$PR_NUMBER.json
+
+            # did we hit end of the events?
+            if [ "$(jq -r '. | length' $TEMP_DIR/events-$PR_NUMBER.json)" == "0" ];
+            then
+                break
+            fi
+
+            PR_READY_DATE_TEMP=$(jq -r '.[] | select(.event == "ready_for_review") | .created_at' $TEMP_DIR/events-$PR_NUMBER.json | sort | tail -n1)
+
+            if [ "x$PR_READY_DATE_TEMP" > "x$PR_READY_DATE" ];
+            then
+                PR_READY_DATE=$PR_READY_DATE_TEMP
+            fi
+
+            PR_PAGE=$((PR_PAGE + 1))
+        done
+
+        if [ "x$PR_READY_DATE" == "x" ];
+        then
+            # opened as non-draft
+            PR_READY_DATE=$(jq -r ".[] | select(.number == $PR_NUMBER) | .created_at" $TEMP_DIR/pulls.json)
+        fi
+
+        # strip time from PR_READY_DATE
+        PR_READY_DATE=$(echo "$PR_READY_DATE" | sed 's|\(.*\)T.*|\1|g')
+
+        PR_TITLE=$(jq -r ".[] | select(.number == $PR_NUMBER) | .title" $TEMP_DIR/pulls.json)
+        PR_AUTHOR=$(jq -r ".[] | select(.number == $PR_NUMBER) | .user.login" $TEMP_DIR/pulls.json)
+        PR_AUTHOR_ID=$(jq -r ".[] | select(.number == $PR_NUMBER) | .user.id" $TEMP_DIR/pulls.json)
+        PR_AUTHOR_NAME=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /user/$PR_AUTHOR_ID | jq -r '.name')
+        PR_URL=$(jq -r ".[] | select(.number == $PR_NUMBER) | .html_url" $TEMP_DIR/pulls.json)
+
+        if [ "$PR_AUTHOR_NAME" == "null" ];
+        then
+            PR_AUTHOR_NAME=$PR_AUTHOR
+        fi
+
+        debug "getting reviews for $PR_NUMBER"
+        # fetch reviews once, used to get both reviews and approvals counts
+        PR_REVIEWS_JSON=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews?per_page=$PAGE_SIZE)
+        PR_REVIEWS_COUNT=$(echo "$PR_REVIEWS_JSON" | jq '. | length')
+        PR_REVIEWS=$(echo "$PR_REVIEWS_JSON" | jq '.[].user.login' | sort -u | wc -l)
+        PR_APPROVALS=$(echo "$PR_REVIEWS_JSON" | jq -r '.[] | select(.state == "APPROVED") | .user.login' | sort -u | wc -l)
+        
+        if [ "$PR_REVIEWS_COUNT" == "$PAGE_SIZE" ];
+        then
+            echo "WARNING: PR #$PR_NUMBER has $PR_REVIEWS_COUNT and may have exceeded page limit."
+        fi
+
+        # write the PR to the output
+        echo "| $PR_READY_DATE | $PR_TITLE #[$PR_NUMBER]($PR_URL) | [$PR_AUTHOR_NAME](https://github.com/$PR_AUTHOR) | $PR_REVIEWS | $PR_APPROVALS |" >> $OUTPUT_FILENAME
+
+    done
+
+    PAGE=$((PAGE + 1))
+done
+
+# new line, close the "loading ..." line
+echo "" 1>&2
+
+# output as Markdwon to STDOUT sorted
+# this can directly be pasted into docs as needed (i.e. .md or google docs)
+echo "| Date 🔽 | Title | Author | Reviews | Approvals |"
+echo "| --- | --- | --- | --- | --- |"
+cat $OUTPUT_FILENAME | sort
