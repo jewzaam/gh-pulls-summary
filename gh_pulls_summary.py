@@ -218,7 +218,7 @@ def fetch_pr_files(owner, repo, pr_number):
     return files
 
 
-def fetch_and_process_pull_requests(owner, repo, draft_filter, file_include, file_exclude, pr_number=None):
+def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include=None, file_exclude=None, pr_number=None):
     """
     Fetches and processes pull requests for the specified repository.
     If a single PR number is specified, only that PR is fetched and processed.

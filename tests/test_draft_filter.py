@@ -27,7 +27,7 @@ class TestDraftFilter(unittest.TestCase):
         mock_fetch_reviews.return_value = []
 
         # Call the function with "only-drafts" filter
-        result = fetch_and_process_pull_requests("owner", "repo", draft_filter="only-drafts", file_filters=None)
+        result = fetch_and_process_pull_requests("owner", "repo", draft_filter="only-drafts")
 
         # Verify the result
         self.assertEqual(len(result), 1)
@@ -50,7 +50,7 @@ class TestDraftFilter(unittest.TestCase):
         mock_fetch_reviews.return_value = []
 
         # Call the function with "no-drafts" filter
-        result = fetch_and_process_pull_requests("owner", "repo", draft_filter="no-drafts", file_filters=None)
+        result = fetch_and_process_pull_requests("owner", "repo", draft_filter="no-drafts")
 
         # Verify the result
         self.assertEqual(len(result), 1)
