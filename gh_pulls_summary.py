@@ -220,10 +220,11 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters):
             logging.debug(f"Excluding non-draft PR #{pr['number']}")
             continue
 
+        pr_number = pr["number"]
+
         # Apply file filters if specified
         if file_filters and len(file_filters) > 0:
             # Fetch files changed in the PR
-            pr_number = pr["number"]
             files = fetch_pr_files(owner, repo, pr_number)
             file_paths = [file["filename"] for file in files]
 

@@ -43,7 +43,7 @@ class TestProcessingLogic(unittest.TestCase):
         ]
 
         # Call the function
-        result = fetch_and_process_pull_requests("owner", "repo", draft_filter=None)
+        result = fetch_and_process_pull_requests("owner", "repo", draft_filter=None, file_filters=None)
 
         # Verify the result
         expected_result = [
