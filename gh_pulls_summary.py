@@ -194,7 +194,9 @@ def fetch_pr_files(owner, repo, pr_number):
     """
     endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}/files"
     logging.debug(f"Fetching files for PR #{pr_number}")
-    return github_api_request(endpoint, use_paging=True)
+    files = github_api_request(endpoint, use_paging=True)
+    logging.debug(f"Files fetched for PR #{pr_number}: {files}")
+    return files
 
 
 def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters):
