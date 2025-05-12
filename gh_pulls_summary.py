@@ -69,6 +69,11 @@ def parse_arguments():
     parser.add_argument("--owner", default=default_owner, help="The owner of the repository (e.g., 'microsoft').")
     parser.add_argument("--repo", default=default_repo, help="The name of the repository (e.g., 'vscode').")
     parser.add_argument(
+        "--pr-number",
+        type=int,
+        help="Specify a single pull request number to query."
+    )
+    parser.add_argument(
         "--draft-filter",
         choices=["only-drafts", "no-drafts"],
         help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts."
@@ -161,6 +166,15 @@ def fetch_pull_requests(owner, repo):
     return github_api_request(endpoint, params)
 
 
+def fetch_single_pull_request(owner, repo, pr_number):
+    """
+    Fetches a single pull request by its number.
+    """
+    endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}"
+    logging.debug(f"Fetching single pull request #{pr_number} for {owner}/{repo}")
+    return github_api_request(endpoint, use_paging=False)
+
+
 def fetch_issue_events(owner, repo, pr_number):
     """
     Fetches all issue events for a specific pull request.
@@ -199,16 +213,23 @@ def fetch_pr_files(owner, repo, pr_number):
     return files
 
 
-def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters):
+def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters, pr_number=None):
     """
     Fetches and processes pull requests for the specified repository.
+    If a single PR number is specified, only that PR is fetched and processed.
     Returns a list of processed pull request data.
     """
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
     pull_requests = []
     print("Loading pull request data...", end="", flush=True)
 
-    prs = fetch_pull_requests(owner, repo)
+    if pr_number:
+        # Fetch a single PR
+        pr = fetch_single_pull_request(owner, repo, pr_number)
+        prs = [pr]  # Wrap in a list for consistent processing
+    else:
+        # Fetch all PRs
+        prs = fetch_pull_requests(owner, repo)
 
     for pr in prs:
         logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
@@ -311,7 +332,7 @@ def main():
     # Compile regex patterns for file filters
     file_filters = [re.compile(pattern) for pattern in args.file_filter] if args.file_filter else None
 
-    pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter, file_filters)
+    pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter, file_filters, args.pr_number)
     markdown_output = generate_markdown_output(pull_requests)
 
     print(markdown_output)
