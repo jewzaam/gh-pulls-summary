@@ -79,9 +79,14 @@ def parse_arguments():
         help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts."
     )
     parser.add_argument(
-        "--file-filter",
+        "--file-include",
         action="append",
-        help="Regex pattern to filter pull requests based on changed file paths. Can be specified multiple times."
+        help="Regex pattern to include pull requests based on changed file paths. Can be specified multiple times."
+    )
+    parser.add_argument(
+        "--file-exclude",
+        action="append",
+        help="Regex pattern to exclude pull requests based on changed file paths. Can be specified multiple times."
     )
     parser.add_argument(
         "--debug",
@@ -213,7 +218,7 @@ def fetch_pr_files(owner, repo, pr_number):
     return files
 
 
-def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters, pr_number=None):
+def fetch_and_process_pull_requests(owner, repo, draft_filter, file_include, file_exclude, pr_number=None):
     """
     Fetches and processes pull requests for the specified repository.
     If a single PR number is specified, only that PR is fetched and processed.
@@ -246,17 +251,19 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters, pr_
         pr_number = pr["number"]
 
         # Apply file filters if specified
-        if file_filters and len(file_filters) > 0:
+        if file_include or file_exclude:
             # Fetch files changed in the PR
             files = fetch_pr_files(owner, repo, pr_number)
             file_paths = [file["filename"] for file in files]
 
-            matches = any(
-                any(re.search(pattern, file_path) for file_path in file_paths)
-                for pattern in file_filters
-            )
-            if not matches:
-                logging.debug(f"Excluding PR #{pr_number} due to file filter mismatch")
+            # Check file-exclude filters first
+            if file_exclude and any(re.search(pattern, file_path) for pattern in file_exclude for file_path in file_paths):
+                logging.debug(f"Excluding PR #{pr_number} due to file-exclude filter match")
+                continue
+
+            # Check file-include filters
+            if file_include and not any(re.search(pattern, file_path) for pattern in file_include for file_path in file_paths):
+                logging.debug(f"Excluding PR #{pr_number} due to no file-include filter match")
                 continue
 
         pr_title = pr["title"]
@@ -330,9 +337,12 @@ def main():
     configure_logging(args.debug)
 
     # Compile regex patterns for file filters
-    file_filters = [re.compile(pattern) for pattern in args.file_filter] if args.file_filter else None
+    file_include = [re.compile(pattern) for pattern in args.file_include] if args.file_include else None
+    file_exclude = [re.compile(pattern) for pattern in args.file_exclude] if args.file_exclude else None
 
-    pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter, file_filters, args.pr_number)
+    pull_requests = fetch_and_process_pull_requests(
+        args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number
+    )
     markdown_output = generate_markdown_output(pull_requests)
 
     print(markdown_output)
