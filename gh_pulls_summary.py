@@ -8,6 +8,7 @@ import argparse
 import logging
 import argcomplete
 import subprocess
+import re
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -71,6 +72,11 @@ def parse_arguments():
         "--draft-filter",
         choices=["only-drafts", "no-drafts"],
         help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts."
+    )
+    parser.add_argument(
+        "--file-filter",
+        action="append",
+        help="Regex pattern to filter pull requests based on changed file paths. Can be specified multiple times."
     )
     parser.add_argument(
         "--debug",
@@ -182,7 +188,16 @@ def fetch_user_details(username):
     return github_api_request(endpoint, use_paging=False)
 
 
-def fetch_and_process_pull_requests(owner, repo, draft_filter):
+def fetch_pr_files(owner, repo, pr_number):
+    """
+    Fetches the list of files changed in a specific pull request.
+    """
+    endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}/files"
+    logging.debug(f"Fetching files for PR #{pr_number}")
+    return github_api_request(endpoint, use_paging=True)
+
+
+def fetch_and_process_pull_requests(owner, repo, draft_filter, file_filters):
     """
     Fetches and processes pull requests for the specified repository.
     Returns a list of processed pull request data.
@@ -205,7 +220,21 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter):
             logging.debug(f"Excluding non-draft PR #{pr['number']}")
             continue
 
-        pr_number = pr["number"]
+        # Apply file filters if specified
+        if file_filters and len(file_filters) > 0:
+            # Fetch files changed in the PR
+            pr_number = pr["number"]
+            files = fetch_pr_files(owner, repo, pr_number)
+            file_paths = [file["filename"] for file in files]
+
+            matches = any(
+                any(re.search(pattern, file_path) for file_path in file_paths)
+                for pattern in file_filters
+            )
+            if not matches:
+                logging.debug(f"Excluding PR #{pr_number} due to file filter mismatch")
+                continue
+
         pr_title = pr["title"]
         pr_author = pr["user"]["login"]
         pr_url = pr["html_url"]
@@ -276,7 +305,10 @@ def main():
 
     configure_logging(args.debug)
 
-    pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter)
+    # Compile regex patterns for file filters
+    file_filters = [re.compile(pattern) for pattern in args.file_filter] if args.file_filter else None
+
+    pull_requests = fetch_and_process_pull_requests(args.owner, args.repo, args.draft_filter, file_filters)
     markdown_output = generate_markdown_output(pull_requests)
 
     print(markdown_output)
