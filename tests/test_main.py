@@ -18,7 +18,8 @@ class TestMainFunction(unittest.TestCase):
             owner="owner",
             repo="repo",
             draft_filter=None,
-            debug=False
+            debug=False,
+            pr_number=None,
         )
 
         # Mock fetch_and_process_pull_requests
@@ -46,7 +47,7 @@ class TestMainFunction(unittest.TestCase):
         main()
 
         # Verify that fetch_and_process_pull_requests was called with the correct arguments
-        mock_fetch_and_process_pull_requests.assert_called_once_with("owner", "repo", None, [])
+        mock_fetch_and_process_pull_requests.assert_called_once_with("owner", "repo", None, [], None)
 
         # Verify that generate_markdown_output was called with the processed pull requests
         mock_generate_markdown_output.assert_called_once_with(mock_fetch_and_process_pull_requests.return_value)
