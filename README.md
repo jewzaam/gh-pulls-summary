@@ -2,6 +2,8 @@
 
 This tool fetches and summarizes pull requests from a specified GitHub repository. It outputs the data in a Markdown table format, which can be easily copied into documentation or reports.
 
+---
+
 ## Features
 - Fetch pull requests from public or private repositories.
 - Filter pull requests based on draft status (`only-drafts`, `no-drafts`, or no filter).
@@ -15,7 +17,26 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ## Requirements
 - Python 3.6 or later.
-- see `requirements.txt`
+- See `requirements.txt`.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Steps](#steps)
+- [Usage](#usage)
+  - [Running Against a Public Repository (No Authentication)](#running-against-a-public-repository-no-authentication)
+  - [Running Against a Private Repository (Requires Authentication)](#running-against-a-private-repository-requires-authentication)
+- [Managing GitHub Token Securely](#managing-github-token-securely)
+  - [Use Environment Variables](#1-use-environment-variables)
+  - [Using .env Files](#2-using-env-files)
+  - [Use System Keyring](#3-use-system-keyring)
+- [Optional Arguments](#optional-arguments)
+- [Output](#output)
 
 ---
 
@@ -90,37 +111,140 @@ gh-pulls-summary --owner my-org --repo private-repo
 
 ---
 
-## Managing GitHub Token Securely on Linux
+## Managing GitHub Token Securely
 
-Instead of exporting the GitHub token directly in your shell, you can use `secret-tool` to securely store and retrieve the token. This approach avoids exposing the token in your shell history or environment variables.
+Security is critical when managing your GitHub token. Tokens grant access to your repositories and should be handled with care to prevent unauthorized access. Below are instructions tailored for different operating systems to securely manage your token.
 
-### Storing the Token
-To store your GitHub token securely using `secret-tool`, run the following command:
+### 1. Use Environment Variables
 
+#### Linux/macOS
+Store the token in an environment variable to avoid hardcoding it in scripts or files. For example:
+
+```bash
+export GITHUB_TOKEN=<your_personal_access_token>
+```
+
+You can then use the token when running the tool:
+
+```bash
+gh-pulls-summary --owner <owner> --repo <repo>
+```
+
+#### Windows (Command Prompt)
+Use the `set` command to set the environment variable:
+
+```cmd
+set GITHUB_TOKEN=<your_personal_access_token>
+```
+
+Run the tool:
+
+```cmd
+gh-pulls-summary --owner <owner> --repo <repo>
+```
+
+#### Windows (PowerShell)
+Use the `$env:` syntax to set the environment variable:
+
+```powershell
+$env:GITHUB_TOKEN="<your_personal_access_token>"
+```
+
+Run the tool:
+
+```powershell
+gh-pulls-summary --owner <owner> --repo <repo>
+```
+
+### 2. Using `.env` Files
+You can use a `.env` file to manage environment variables locally. Create a `.env` file:
+
+```env
+GITHUB_TOKEN=<your_personal_access_token>
+```
+
+Load the `.env` file in your shell before running the tool:
+
+#### Linux/macOS
+```bash
+source .env
+```
+
+#### Windows (PowerShell)
+```powershell
+Get-Content .env | ForEach-Object { $name, $value = $_ -split '='; $env:$name = $value }
+```
+
+**Note**: The `.env` file is excluded in the repository's `.gitignore` file.
+
+### 3. Use System Keyring
+
+#### Linux
+On Linux, you can use `secret-tool` to securely store and retrieve the token:
+
+##### Storing the Token
 ```bash
 secret-tool store --label="GitHub Token" service gh-pulls-summary
 ```
 
-You will be prompted to enter your token. This stores the token securely in your system's keyring.
-
-### Retrieving and Using the Token
-You can retrieve the token and use it in-line when running the `gh-pulls-summary` command:
-
+##### Retrieving and Using the Token
 ```bash
 GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner <owner> --repo <repo>
 ```
 
-### Updating the Token
-If you need to update the token, simply re-run the `secret-tool store` command:
+##### Updating the Token
+If you need to update the token, re-run the `secret-tool store` command:
 
 ```bash
 secret-tool store --label="GitHub Token" service gh-pulls-summary
 ```
 
-### Example Usage
+#### macOS
+On macOS, you can use the Keychain to securely store and retrieve the token:
 
+##### Storing the Token
 ```bash
-GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner my-org --repo private-repo
+security add-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w <your_personal_access_token>
+```
+
+##### Retrieving and Using the Token
+```bash
+GITHUB_TOKEN=$(security find-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w) gh-pulls-summary --owner <owner> --repo <repo>
+```
+
+##### Updating the Token
+If you need to update the token, re-run the `security add-generic-password` command.
+
+#### Windows
+On Windows, you can use the SecretManagement module in PowerShell to securely store and retrieve the token:
+
+##### Storing the Token
+1. Install the SecretManagement module:
+   ```powershell
+   Install-Module -Name Microsoft.PowerShell.SecretManagement -Force
+   ```
+
+2. Register a vault (e.g., SecretStore):
+   ```powershell
+   Register-SecretVault -Name MySecretVault -ModuleName Microsoft.PowerShell.SecretStore -DefaultVault
+   ```
+
+3. Store the token:
+   ```powershell
+   Set-Secret -Name GitHubToken -Secret "<your_personal_access_token>"
+   ```
+
+##### Retrieving and Using the Token
+Retrieve the token and set it as an environment variable:
+```powershell
+$env:GITHUB_TOKEN = Get-Secret -Name GitHubToken
+gh-pulls-summary --owner <owner> --repo <repo>
+```
+
+##### Updating the Token
+To update the token, re-run the `Set-Secret` command:
+```powershell
+Set-Secret -Name GitHubToken -Secret "<new_personal_access_token>"
 ```
 
 ---
@@ -147,7 +271,7 @@ gh-pulls-summary --owner jewzaam --repo gh-pulls-summary --debug
 
 ## Output
 The tool outputs a Markdown table with the following columns:
-- **Date 🔽**: The date the pull request was marked ready for review.
+- **Date**: The date the pull request was marked ready for review.
 - **Title**: The title of the pull request, with a link to the pull request.
 - **Author**: The name of the author, with a link to their GitHub profile.
 - **Reviews**: The number of unique reviewers.
@@ -159,5 +283,5 @@ Example Output:
 | ---------- | --------------------------------------- | --------------- | ------- | --------- |
 | 2025-05-01 | Add feature X #[123](https://github.com/...) | [John Doe](https://github.com/johndoe) | 3       | 2         |
 | 2025-05-02 | Fix bug Y #[124](https://github.com/...) | [Jane Smith](https://github.com/janesmith) | 1       | 1         |
-`
+````
 
