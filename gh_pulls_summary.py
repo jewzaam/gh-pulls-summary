@@ -306,6 +306,9 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             "reviews": pr_reviews,
             "approvals": pr_approvals
         })
+    
+    # single newline after the "loading pull request data" line
+    print(".", flush=True)
 
     return pull_requests
 
