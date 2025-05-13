@@ -55,5 +55,26 @@ class TestMainFunction(unittest.TestCase):
         # Verify that the output was printed
         mock_print.assert_called_once_with(mock_generate_markdown_output.return_value)
 
+    @patch("gh_pulls_summary.get_repo_and_owner_from_git", return_value=(None, None))
+    @patch("gh_pulls_summary.parse_arguments")
+    def test_main_failure_without_owner_and_repo(self, mock_parse_arguments, mock_get_repo_and_owner_from_git):
+        # Mock command-line arguments with no owner or repo
+        mock_parse_arguments.return_value = MagicMock(
+            owner=None,
+            repo=None,
+            draft_filter=None,
+            debug=False,
+            pr_number=None,
+        )
+
+        # Verify that main raises a ValueError
+        with self.assertRaises(ValueError) as context:
+            main()
+
+        self.assertEqual(
+            str(context.exception),
+            "Repository owner and name must be specified, either via arguments or local Git metadata."
+        )
+
 if __name__ == "__main__":
     unittest.main()
