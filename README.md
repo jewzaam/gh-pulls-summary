@@ -90,6 +90,41 @@ gh-pulls-summary --owner my-org --repo private-repo
 
 ---
 
+## Managing GitHub Token Securely on Linux
+
+Instead of exporting the GitHub token directly in your shell, you can use `secret-tool` to securely store and retrieve the token. This approach avoids exposing the token in your shell history or environment variables.
+
+### Storing the Token
+To store your GitHub token securely using `secret-tool`, run the following command:
+
+```bash
+secret-tool store --label="GitHub Token" service gh-pulls-summary
+```
+
+You will be prompted to enter your token. This stores the token securely in your system's keyring.
+
+### Retrieving and Using the Token
+You can retrieve the token and use it in-line when running the `gh-pulls-summary` command:
+
+```bash
+GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner <owner> --repo <repo>
+```
+
+### Updating the Token
+If you need to update the token, simply re-run the `secret-tool store` command:
+
+```bash
+secret-tool store --label="GitHub Token" service gh-pulls-summary
+```
+
+### Example Usage
+
+```bash
+GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner my-org --repo private-repo
+```
+
+---
+
 ## Optional Arguments
 - `--draft-filter`: Filter pull requests based on draft status.
   - `only-drafts`: Include only draft pull requests.
