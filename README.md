@@ -23,22 +23,43 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ## Table of Contents
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-  - [Prerequisites](#prerequisites)
-  - [Steps](#steps)
-- [Usage](#usage)
-  - [Running Against a Public Repository (No Authentication)](#running-against-a-public-repository-no-authentication)
-  - [Running Against a Private Repository (Requires Authentication)](#running-against-a-private-repository-requires-authentication)
-- [Managing GitHub Token Securely](#managing-github-token-securely)
-  - [Use Environment Variables](#1-use-environment-variables)
-  - [Using .env Files](#2-using-env-files)
-  - [Use System Keyring](#3-use-system-keyring)
-- [Optional Arguments](#optional-arguments)
-- [Output](#output)
+<!--TOC-->
 
----
+- [GitHub Pull Requests Summary Tool](#github-pull-requests-summary-tool)
+  - [Features](#features)
+  - [Requirements](#requirements)
+  - [Table of Contents](#table-of-contents)
+  - [Installation](#installation)
+    - [Prerequisites](#prerequisites)
+    - [Steps](#steps)
+  - [Usage](#usage)
+    - [Running Against a Public Repository (No Authentication)](#running-against-a-public-repository-no-authentication)
+    - [Running Against a Private Repository (Requires Authentication)](#running-against-a-private-repository-requires-authentication)
+  - [Managing GitHub Token Securely](#managing-github-token-securely)
+    - [1. Use Environment Variables](#1-use-environment-variables)
+      - [Linux/macOS](#linuxmacos)
+      - [Windows (Command Prompt)](#windows-command-prompt)
+      - [Windows (PowerShell)](#windows-powershell)
+    - [2. Using `.env` Files](#2-using-env-files)
+      - [Linux/macOS](#linuxmacos-1)
+      - [Windows (PowerShell)](#windows-powershell-1)
+    - [3. Use System Keyring](#3-use-system-keyring)
+      - [Linux](#linux)
+        - [Storing the Token](#storing-the-token)
+        - [Retrieving and Using the Token](#retrieving-and-using-the-token)
+        - [Updating the Token](#updating-the-token)
+      - [macOS](#macos)
+        - [Storing the Token](#storing-the-token-1)
+        - [Retrieving and Using the Token](#retrieving-and-using-the-token-1)
+        - [Updating the Token](#updating-the-token-1)
+      - [Windows](#windows)
+        - [Storing the Token](#storing-the-token-2)
+        - [Retrieving and Using the Token](#retrieving-and-using-the-token-2)
+        - [Updating the Token](#updating-the-token-2)
+  - [Optional Arguments](#optional-arguments)
+  - [Output](#output)
+
+<!--TOC-->
 
 ## Installation
 
