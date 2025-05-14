@@ -314,12 +314,21 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     return pull_requests
 
 
-def generate_markdown_output(pull_requests):
+def generate_markdown_output(args):
     """
     Generates Markdown output for the given list of pull requests.
-    Returns the Markdown string.
+    Takes `args` as the only argument.
     """
-    logging.debug("Generating Markdown output for pull requests")
+    # Compile regex patterns for file filters
+    file_include = [re.compile(pattern) for pattern in args.file_include] if args.file_include else None
+    file_exclude = [re.compile(pattern) for pattern in args.file_exclude] if args.file_exclude else None
+
+    # Fetch and process pull requests
+    pull_requests = fetch_and_process_pull_requests(
+        args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number
+    )
+
+    # Generate Markdown output
     output = []
     output.append("| Date 🔽 | Title | Author | Reviews | Approvals |")
     output.append("| --- | --- | --- | --- | --- |")
@@ -358,15 +367,8 @@ def main():
 
     configure_logging(args.debug)
 
-    # Compile regex patterns for file filters
-    file_include = [re.compile(pattern) for pattern in args.file_include] if args.file_include else None
-    file_exclude = [re.compile(pattern) for pattern in args.file_exclude] if args.file_exclude else None
-
-    pull_requests = fetch_and_process_pull_requests(
-        args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number
-    )
-
-    markdown_output = generate_markdown_output(pull_requests)
+    # Generate Markdown output
+    markdown_output = generate_markdown_output(args)
 
     # Print timestamp and Markdown output
     print_timestamp()

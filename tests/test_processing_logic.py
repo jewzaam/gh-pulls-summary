@@ -60,18 +60,22 @@ class TestProcessingLogic(unittest.TestCase):
         ]
         self.assertEqual(result, expected_result)
 
-    def test_generate_markdown_output(self):
-        pull_requests = [
-            {
-                "date": "2025-05-02",
-                "title": "Fix bug Y",
-                "number": 124,
-                "url": "https://github.com/owner/repo/pull/124",
-                "author_name": "Jane Smith",
-                "author_url": "https://github.com/janesmith",
-                "reviews": 1,
-                "approvals": 1
-            },
+class TestGenerateMarkdownOutput(unittest.TestCase):
+    @patch("gh_pulls_summary.fetch_and_process_pull_requests")
+    def test_generate_markdown_output(self, mock_fetch_and_process_pull_requests):
+        """Test the generate_markdown_output function."""
+        # Mock arguments
+        args = MagicMock(
+            owner="owner",
+            repo="repo",
+            draft_filter=None,
+            file_include=None,
+            file_exclude=None,
+            pr_number=None
+        )
+
+        # Mock pull request data
+        mock_fetch_and_process_pull_requests.return_value = [
             {
                 "date": "2025-05-01",
                 "title": "Add feature X",
@@ -84,14 +88,21 @@ class TestProcessingLogic(unittest.TestCase):
             }
         ]
 
+        # Call the function
+        markdown_output = generate_markdown_output(args)
+
+        # Verify the output
         expected_output = (
             "| Date 🔽 | Title | Author | Reviews | Approvals |\n"
             "| --- | --- | --- | --- | --- |\n"
-            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |\n"
-            "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 1 | 1 |"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |"
         )
+        self.assertEqual(markdown_output, expected_output)
 
-        self.assertEqual(generate_markdown_output(pull_requests), expected_output)
+        # Verify that fetch_and_process_pull_requests was called with the correct arguments
+        mock_fetch_and_process_pull_requests.assert_called_once_with(
+            "owner", "repo", None, None, None, None
+        )
 
 if __name__ == "__main__":
     unittest.main()
