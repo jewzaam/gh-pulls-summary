@@ -13,7 +13,7 @@ class TestMainFunction(unittest.TestCase):
         """Test the print_timestamp function."""
         mock_time = datetime(2025, 5, 14, 15, 12, tzinfo=timezone.utc)
         print_timestamp(mock_time)
-        mock_print.assert_called_once_with("**Generated at 2025-05-14 15:12Z**")
+        mock_print.assert_called_once_with("**Generated at 2025-05-14 15:12Z**\n")
 
     @patch("builtins.print")
     def test_print_markdown_output(self, mock_print):

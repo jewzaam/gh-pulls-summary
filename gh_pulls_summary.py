@@ -345,7 +345,7 @@ def print_timestamp(current_time=None):
     if current_time is None:
         current_time = datetime.now(timezone.utc)
     timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**")
-    print(timestamp)
+    print(f"{timestamp}\n")
 
 
 def print_markdown_output(markdown_output):
