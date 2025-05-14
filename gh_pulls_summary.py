@@ -9,6 +9,7 @@ import logging
 import argcomplete
 import subprocess
 import re
+import datetime
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -327,6 +328,24 @@ def generate_markdown_output(pull_requests):
     return "\n".join(output)
 
 
+def print_timestamp(current_time=None):
+    """
+    Prints the current timestamp in Markdown syntax.
+    """
+    from datetime import datetime, timezone
+    if current_time is None:
+        current_time = datetime.now(timezone.utc)
+    timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**")
+    print(timestamp)
+
+
+def print_markdown_output(markdown_output):
+    """
+    Prints the Markdown output.
+    """
+    print(markdown_output)
+
+
 def main():
     """
     Main function to fetch and summarize GitHub pull requests.
@@ -346,9 +365,12 @@ def main():
     pull_requests = fetch_and_process_pull_requests(
         args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number
     )
+
     markdown_output = generate_markdown_output(pull_requests)
 
-    print(markdown_output)
+    # Print timestamp and Markdown output
+    print_timestamp()
+    print_markdown_output(markdown_output)
 
 
 if __name__ == "__main__":  # pragma: no cover
