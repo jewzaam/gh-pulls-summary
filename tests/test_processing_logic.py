@@ -22,6 +22,14 @@ class TestProcessingLogic(unittest.TestCase):
                 "html_url": "https://github.com/owner/repo/pull/1",
                 "draft": False,
                 "created_at": "2025-05-01T12:00:00Z"
+            },
+            {
+                "number": 2,
+                "title": "Fix bug Y",
+                "user": {"login": "janedoe"},
+                "html_url": "https://github.com/owner/repo/pull/2",
+                "draft": False,
+                "created_at": "2025-05-02T12:00:00Z"
             }
         ]
 
@@ -60,7 +68,41 @@ class TestProcessingLogic(unittest.TestCase):
         ]
         self.assertEqual(result, expected_result)
 
-    def test_generate_markdown_output(self):
+    @patch("gh_pulls_summary.fetch_reviews")
+    @patch("gh_pulls_summary.fetch_issue_events")
+    @patch("gh_pulls_summary.fetch_pull_requests")
+    def test_generate_markdown_output(self, mock_fetch_reviews, mock_fetch_issue_events, mock_fetch_pull_requests):
+        # Mock reviews
+        mock_fetch_reviews.return_value = [
+            {"user": {"login": "reviewer1"}, "state": "APPROVED"},
+            {"user": {"login": "reviewer2"}, "state": "COMMENTED"}
+        ]
+
+        # Mock issue events
+        mock_fetch_issue_events.return_value = [
+            {"event": "ready_for_review", "created_at": "2025-05-02T12:00:00Z"}
+        ]
+
+        # Mock pull requests
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 1,
+                "title": "Add feature X",
+                "user": {"login": "johndoe"},
+                "html_url": "https://github.com/owner/repo/pull/1",
+                "draft": False,
+                "created_at": "2025-05-01T12:00:00Z"
+            },
+            {
+                "number": 2,
+                "title": "Fix bug Y",
+                "user": {"login": "janedoe"},
+                "html_url": "https://github.com/owner/repo/pull/2",
+                "draft": False,
+                "created_at": "2025-05-02T12:00:00Z"
+            }
+        ]
+
         pull_requests = [
             {
                 "date": "2025-05-02",
@@ -91,7 +133,14 @@ class TestProcessingLogic(unittest.TestCase):
             "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 1 | 1 |"
         )
 
-        self.assertEqual(generate_markdown_output(pull_requests), expected_output)
+        self.assertEqual(generate_markdown_output(pull_requests, sort_by="date"), expected_output)
+
+        pull_requests = fetch_and_process_pull_requests("owner", "repo")
+
+        # Test sorting by title
+        sorted_by_title = generate_markdown_output(pull_requests, sort_by="title")
+        self.assertIn("Fix bug Y", sorted_by_title)
+        self.assertIn("Add feature X", sorted_by_title)
 
 if __name__ == "__main__":
     unittest.main()

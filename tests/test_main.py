@@ -21,6 +21,7 @@ class TestMainFunction(unittest.TestCase):
             debug=False,
             pr_number=None,
         )
+        mock_parse_arguments.return_value.sort_by = "date"
 
         # Mock fetch_and_process_pull_requests
         mock_fetch_and_process_pull_requests.return_value = [
@@ -50,7 +51,7 @@ class TestMainFunction(unittest.TestCase):
         mock_fetch_and_process_pull_requests.assert_called_once_with("owner", "repo", None, [], [], None)
 
         # Verify that generate_markdown_output was called with the processed pull requests
-        mock_generate_markdown_output.assert_called_once_with(mock_fetch_and_process_pull_requests.return_value)
+        mock_generate_markdown_output.assert_called_once_with(mock_fetch_and_process_pull_requests.return_value, "date")
 
         # Verify that the output was printed
         mock_print.assert_called_once_with(mock_generate_markdown_output.return_value)

@@ -93,6 +93,12 @@ def parse_arguments():
         action="store_true",
         help="Enable debug logging."
     )
+    parser.add_argument(
+        "--sort-by",
+        choices=["date", "title", "author", "reviews", "approvals"],
+        default="date",
+        help="Sort the Markdown output by the specified column. Default is 'date'."
+    )
 
     # Enable tab completion
     argcomplete.autocomplete(parser)
@@ -237,7 +243,10 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         prs = fetch_pull_requests(owner, repo)
 
     for pr in prs:
-        logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
+        try:
+            logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
+        except:
+            print(f"ERROR: pr={pr}")
         print(".", end="", flush=True)
 
         # Apply draft filter if specified
@@ -313,7 +322,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     return pull_requests
 
 
-def generate_markdown_output(pull_requests):
+def generate_markdown_output(pull_requests, sort_by):
     """
     Generates Markdown output for the given list of pull requests.
     Returns the Markdown string.
@@ -322,7 +331,7 @@ def generate_markdown_output(pull_requests):
     output = []
     output.append("| Date 🔽 | Title | Author | Reviews | Approvals |")
     output.append("| --- | --- | --- | --- | --- |")
-    for pr in sorted(pull_requests, key=lambda x: x["date"]):
+    for pr in sorted(pull_requests, key=lambda x: x[sort_by]):
         output.append(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
     return "\n".join(output)
 
@@ -346,7 +355,7 @@ def main():
     pull_requests = fetch_and_process_pull_requests(
         args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number
     )
-    markdown_output = generate_markdown_output(pull_requests)
+    markdown_output = generate_markdown_output(pull_requests, args.sort_by)
 
     print(markdown_output)
 

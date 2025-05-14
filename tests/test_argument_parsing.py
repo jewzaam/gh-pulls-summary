@@ -4,7 +4,7 @@ from unittest.mock import patch
 from gh_pulls_summary import parse_arguments
 
 # Configure logging for tests
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(asctime)s - %(message)s")
 
 class TestArgumentParsing(unittest.TestCase):
 
@@ -42,6 +42,11 @@ class TestArgumentParsing(unittest.TestCase):
         self.assertIsNone(args.repo)
         self.assertIsNone(args.draft_filter)
         self.assertFalse(args.debug)
+
+    @patch("sys.argv", ["gh_pulls_summary.py", "--owner", "owner", "--repo", "repo", "--sort-by", "title"])
+    def test_parse_arguments_with_sort_by(self):
+        args = parse_arguments()
+        self.assertEqual(args.sort_by, "title")
 
 if __name__ == "__main__":
     unittest.main()
