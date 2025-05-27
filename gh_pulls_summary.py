@@ -293,9 +293,26 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
 
         # Fetch reviews and approvals
         reviews = fetch_reviews(owner, repo, pr_number)
-        pr_reviews = len(set(review["user"]["login"] for review in reviews))
-        logging.debug(f"PR #{pr_number} has {len(reviews)} reviews, {pr_reviews} unique reviewers")
-        pr_approvals = len(set(review["user"]["login"] for review in reviews if review["state"] == "APPROVED"))
+        # Map to most recent review state per user
+        user_latest_review = {}
+        for review in reviews:
+            user = review["user"]["login"]
+            submitted_at = review.get("submitted_at")
+            state = review["state"]
+            # Only consider reviews with a submitted_at timestamp (ignore pending, etc)
+            if not submitted_at:
+                continue
+            # If user not seen or this review is newer, update
+            if user not in user_latest_review or submitted_at > user_latest_review[user]["submitted_at"]:
+                # If the new state is "COMMENTED" but the existing state is not "COMMENTED", ignore this review
+                if user in user_latest_review and user_latest_review[user]["state"] != "COMMENTED" and state == "COMMENTED":
+                    continue
+                user_latest_review[user] = {"state": state, "submitted_at": submitted_at}
+
+        states = [data["state"] for data in user_latest_review.values()]
+        pr_reviews = len(user_latest_review)
+        pr_approvals = sum(1 for s in states if s == "APPROVED")
+        pr_changes = sum(1 for s in states if s == "CHANGES_REQUESTED")
 
         pull_requests.append({
             "date": pr_ready_date,
@@ -305,7 +322,8 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             "author_name": pr_author_name,
             "author_url": pr_author_url,
             "reviews": pr_reviews,
-            "approvals": pr_approvals
+            "approvals": pr_approvals,
+            "changes": pr_changes,
         })
     
     # single newline after the "loading pull request data" line
@@ -330,10 +348,10 @@ def generate_markdown_output(args):
 
     # Generate Markdown output
     output = []
-    output.append("| Date 🔽 | Title | Author | Reviews | Approvals |")
+    output.append("| Date 🔽 | Title | Author | Change Requested | Approvals |")
     output.append("| --- | --- | --- | --- | --- |")
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
-        output.append(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['reviews']} | {pr['approvals']} |")
+        output.append(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |")
     return "\n".join(output)
 
 

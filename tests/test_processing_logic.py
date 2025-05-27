@@ -38,8 +38,9 @@ class TestProcessingLogic(unittest.TestCase):
 
         # Mock reviews
         mock_fetch_reviews.return_value = [
-            {"user": {"login": "reviewer1"}, "state": "APPROVED"},
-            {"user": {"login": "reviewer2"}, "state": "COMMENTED"}
+            {"user": {"login": "reviewer1"}, "state": "APPROVED", "submitted_at": "2025-05-02T12:00:00Z"},
+            {"user": {"login": "reviewer1"}, "state": "COMMENTED", "submitted_at": "2025-05-03T12:00:00Z"},
+            {"user": {"login": "reviewer2"}, "state": "COMMENTED", "submitted_at": "2025-05-02T12:00:00Z"}
         ]
 
         # Call the function
@@ -55,7 +56,8 @@ class TestProcessingLogic(unittest.TestCase):
                 "author_name": "John Doe",
                 "author_url": "https://github.com/johndoe",
                 "reviews": 2,
-                "approvals": 1
+                "approvals": 1,
+                "changes": 0,
             }
         ]
         self.assertEqual(result, expected_result)
@@ -83,8 +85,9 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
                 "url": "https://github.com/owner/repo/pull/123",
                 "author_name": "John Doe",
                 "author_url": "https://github.com/johndoe",
-                "reviews": 3,
-                "approvals": 2
+                "reviews": 2,
+                "approvals": 2,
+                "changes": 1,
             }
         ]
 
@@ -93,9 +96,9 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
 
         # Verify the output
         expected_output = (
-            "| Date 🔽 | Title | Author | Reviews | Approvals |\n"
+            "| Date 🔽 | Title | Author | Change Requested | Approvals |\n"
             "| --- | --- | --- | --- | --- |\n"
-            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 |"
         )
         self.assertEqual(markdown_output, expected_output)
 
