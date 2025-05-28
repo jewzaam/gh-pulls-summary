@@ -288,7 +288,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
 
         # Fetch author details
         author_details = fetch_user_details(pr_author)
-        pr_author_name = author_details.get("name")
+        pr_author_name = author_details.get("name") or pr_author  # Fallback to username if name is None
         pr_author_url = author_details.get("html_url")
 
         # Fetch reviews and approvals

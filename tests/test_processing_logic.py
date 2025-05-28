@@ -62,6 +62,47 @@ class TestProcessingLogic(unittest.TestCase):
         ]
         self.assertEqual(result, expected_result)
 
+    @patch("gh_pulls_summary.fetch_pull_requests")
+    @patch("gh_pulls_summary.fetch_issue_events")
+    @patch("gh_pulls_summary.fetch_user_details")
+    @patch("gh_pulls_summary.fetch_reviews")
+    def test_author_name_fallback_to_username(self, mock_fetch_reviews, mock_fetch_user_details, mock_fetch_issue_events, mock_fetch_pull_requests):
+        """Test that author_name falls back to username if name is not found."""
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 2,
+                "title": "Fix bug Y",
+                "user": {"login": "janedoe"},
+                "html_url": "https://github.com/owner/repo/pull/2",
+                "draft": False,
+                "created_at": "2025-05-05T12:00:00Z"
+            }
+        ]
+        mock_fetch_issue_events.return_value = [
+            {"event": "ready_for_review", "created_at": "2025-05-06T12:00:00Z"}
+        ]
+        # Simulate missing 'name' in user details
+        mock_fetch_user_details.return_value = {
+            "name": None,
+            "html_url": "https://github.com/janedoe"
+        }
+        mock_fetch_reviews.return_value = []
+        result = fetch_and_process_pull_requests("owner", "repo")
+        expected_result = [
+            {
+                "date": "2025-05-06",
+                "title": "Fix bug Y",
+                "number": 2,
+                "url": "https://github.com/owner/repo/pull/2",
+                "author_name": "janedoe",  # Fallback to username
+                "author_url": "https://github.com/janedoe",
+                "reviews": 0,
+                "approvals": 0,
+                "changes": 0,
+            }
+        ]
+        self.assertEqual(result, expected_result)
+
 class TestGenerateMarkdownOutput(unittest.TestCase):
     @patch("gh_pulls_summary.fetch_and_process_pull_requests")
     def test_generate_markdown_output(self, mock_fetch_and_process_pull_requests):
