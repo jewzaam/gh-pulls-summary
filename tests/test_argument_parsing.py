@@ -43,5 +43,12 @@ class TestArgumentParsing(unittest.TestCase):
         self.assertIsNone(args.draft_filter)
         self.assertFalse(args.debug)
 
+    @patch("sys.argv", ["gh_pulls_summary.py", "--owner", "owner", "--repo", "repo", "--url-from-pr-content", "http://example.com"])
+    def test_parse_arguments_with_url_from_pr_content(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.url_from_pr_content, "http://example.com")
+
 if __name__ == "__main__":
     unittest.main()

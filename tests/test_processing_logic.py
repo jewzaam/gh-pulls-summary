@@ -55,6 +55,8 @@ class TestProcessingLogic(unittest.TestCase):
                 "url": "https://github.com/owner/repo/pull/1",
                 "author_name": "John Doe",
                 "author_url": "https://github.com/johndoe",
+                'pr_body_url': None,
+                'pr_body_url_text': None,
                 "reviews": 2,
                 "approvals": 1,
                 "changes": 0,
@@ -96,12 +98,56 @@ class TestProcessingLogic(unittest.TestCase):
                 "url": "https://github.com/owner/repo/pull/2",
                 "author_name": "janedoe",  # Fallback to username
                 "author_url": "https://github.com/janedoe",
+                'pr_body_url': None,
+                'pr_body_url_text': None,
                 "reviews": 0,
                 "approvals": 0,
                 "changes": 0,
             }
         ]
         self.assertEqual(result, expected_result)
+
+    @patch("gh_pulls_summary.fetch_pr_diff")
+    @patch("gh_pulls_summary.fetch_pull_requests")
+    @patch("gh_pulls_summary.fetch_issue_events")
+    @patch("gh_pulls_summary.fetch_user_details")
+    @patch("gh_pulls_summary.fetch_reviews")
+    def test_pr_body_url_text_extraction(self, mock_fetch_reviews, mock_fetch_user_details, mock_fetch_issue_events, mock_fetch_pull_requests, mock_fetch_pr_diff):
+        # Mock a PR
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 1,
+                "title": "Test PR",
+                "user": {"login": "testuser"},
+                "html_url": "https://github.com/owner/repo/pull/1",
+                "draft": False,
+                "created_at": "2025-06-06T12:00:00Z",
+                "body": "This PR references https://example.com/foo/bar123 and should extract the last segment."
+            }
+        ]
+        mock_fetch_issue_events.return_value = []
+        mock_fetch_user_details.return_value = {"name": "Test User", "html_url": "https://github.com/testuser"}
+        mock_fetch_reviews.return_value = []
+        # Mock the diff to contain an added line with a URL
+        mock_fetch_pr_diff.return_value = """
++ This is an added line with https://example.com/foo/bar123
+- This is a removed line with https://example.com/foo/shouldnotmatch
+"""
+        # Regex to match the URL in the added line
+        url_regex = r"https://example.com/[^\s]+"
+        prs = fetch_and_process_pull_requests(
+            owner="owner",
+            repo="repo",
+            draft_filter=None,
+            file_include=None,
+            file_exclude=None,
+            pr_number=None,
+            url_from_pr_content=url_regex
+        )
+        self.assertEqual(len(prs), 1)
+        pr = prs[0]
+        self.assertEqual(pr["pr_body_url"], "https://example.com/foo/bar123")
+        self.assertEqual(pr["pr_body_url_text"], "bar123")
 
 class TestGenerateMarkdownOutput(unittest.TestCase):
     @patch("gh_pulls_summary.fetch_and_process_pull_requests")
@@ -114,7 +160,8 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             draft_filter=None,
             file_include=None,
             file_exclude=None,
-            pr_number=None
+            pr_number=None,
+            url_from_pr_content=None
         )
 
         # Mock pull request data
@@ -145,7 +192,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
 
         # Verify that fetch_and_process_pull_requests was called with the correct arguments
         mock_fetch_and_process_pull_requests.assert_called_once_with(
-            "owner", "repo", None, None, None, None
+            "owner", "repo", None, None, None, None, None
         )
 
 if __name__ == "__main__":

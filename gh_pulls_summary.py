@@ -90,6 +90,11 @@ def parse_arguments():
         help="Regex pattern to exclude pull requests based on changed file paths. Can be specified multiple times."
     )
     parser.add_argument(
+        "--url-from-pr-content",
+        type=str,
+        help="Regex pattern to extract a URL from the PR body. If set, adds a column to the output table with the matched URL."
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging."
@@ -219,7 +224,24 @@ def fetch_pr_files(owner, repo, pr_number):
     return files
 
 
-def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include=None, file_exclude=None, pr_number=None):
+def fetch_pr_diff(owner, repo, pr_number):
+    """
+    Fetches the diff for a specific pull request using the GitHub API.
+    Returns the diff as a string.
+    """
+    if not pr_number:
+        return None
+
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
+    headers = HEADERS.copy()
+    headers["Accept"] = "application/vnd.github.v3.diff"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch PR diff: {response.status_code} {response.text}")
+    return response.text
+
+
+def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include=None, file_exclude=None, pr_number=None, url_from_pr_content=None):
     """
     Fetches and processes pull requests for the specified repository.
     If a single PR number is specified, only that PR is fetched and processed.
@@ -236,6 +258,8 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     else:
         # Fetch all PRs
         prs = fetch_pull_requests(owner, repo)
+
+    url_regex_compiled = re.compile(url_from_pr_content) if url_from_pr_content else None
 
     for pr in prs:
         logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
@@ -314,6 +338,19 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         pr_approvals = sum(1 for s in states if s == "APPROVED")
         pr_changes = sum(1 for s in states if s == "CHANGES_REQUESTED")
 
+        # Optionally extract a URL from the PR diff (added lines only)
+        pr_body_url = None
+        pr_body_url_text = None
+        if url_regex_compiled:
+            diff = fetch_pr_diff(owner, repo, pr_number)
+            for line in diff.splitlines():
+                if line.startswith('+') and not line.startswith('+++'):
+                    match = url_regex_compiled.search(line)
+                    if match:
+                        pr_body_url = match.group(0)
+                        pr_body_url_text = pr_body_url.rstrip("/").split("/")[-1] if "/" in pr_body_url else pr_body_url
+                        break
+
         pull_requests.append({
             "date": pr_ready_date,
             "title": pr_title,
@@ -324,6 +361,8 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             "reviews": pr_reviews,
             "approvals": pr_approvals,
             "changes": pr_changes,
+            "pr_body_url": pr_body_url,
+            "pr_body_url_text": pr_body_url_text,
         })
     
     # single newline after the "loading pull request data" line
@@ -343,15 +382,36 @@ def generate_markdown_output(args):
 
     # Fetch and process pull requests
     pull_requests = fetch_and_process_pull_requests(
-        args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number
+        args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number, args.url_from_pr_content
     )
+
+    # Determine if we need to add a URL column
+    url_column = False
+    if args.url_from_pr_content:
+        # Find the first PR with a matched URL to determine the column header
+        for pr in pull_requests:
+            if pr.get("pr_body_url"):
+                url_column = True
+                break
 
     # Generate Markdown output
     output = []
-    output.append("| Date 🔽 | Title | Author | Change Requested | Approvals |")
-    output.append("| --- | --- | --- | --- | --- |")
+    header = "| Date 🔽 | Title | Author | Change Requested | Approvals |"
+    if url_column:
+        header = header[:-1] + " | URL |"
+    output.append(header)
+    sep = "| --- | --- | --- | --- | --- |"
+    if url_column:
+        sep = sep[:-1] + " | --- |"
+    output.append(sep)
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
-        output.append(f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |")
+        row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
+        if url_column:
+            if pr.get("pr_body_url"):
+                row = row[:-1] + f" | [{pr['pr_body_url_text']}]({pr['pr_body_url']}) |"
+            else:
+                row = row[:-1] + " |  |"
+        output.append(row)
     return "\n".join(output)
 
 

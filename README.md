@@ -12,6 +12,8 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
   - Title and number of the pull request.
   - Author details.
   - Number of reviews and approvals.
+- `--file-include` / `--file-exclude`: Regex patterns to filter PRs by changed file paths.
+- `--url-from-pr-content`: Regex pattern to extract a URL from the PR body. If set, adds a column to the output table with the matched URL.
 
 ---
 
