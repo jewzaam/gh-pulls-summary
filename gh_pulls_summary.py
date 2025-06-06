@@ -338,18 +338,18 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         pr_approvals = sum(1 for s in states if s == "APPROVED")
         pr_changes = sum(1 for s in states if s == "CHANGES_REQUESTED")
 
-        # Optionally extract a URL from the PR diff (added lines only)
-        pr_body_url = None
-        pr_body_url_text = None
+        # Optionally extract all unique URLs from the PR diff (added lines only), sorted by display text
+        pr_body_urls_dict = {}
         if url_regex_compiled:
             diff = fetch_pr_diff(owner, repo, pr_number)
             for line in diff.splitlines():
                 if line.startswith('+') and not line.startswith('+++'):
-                    match = url_regex_compiled.search(line)
-                    if match:
-                        pr_body_url = match.group(0)
-                        pr_body_url_text = pr_body_url.rstrip("/").split("/")[-1] if "/" in pr_body_url else pr_body_url
-                        break
+                    matches = url_regex_compiled.findall(line)
+                    for match in matches:
+                        url_text = match.rstrip("/").split("/")[-1] if "/" in match else match
+                        pr_body_urls_dict[url_text] = match  # last occurrence wins if duplicate text
+            # Sort the dict by url_text
+            pr_body_urls_dict = dict(sorted(pr_body_urls_dict.items(), key=lambda x: x[0]))
 
         pull_requests.append({
             "date": pr_ready_date,
@@ -361,8 +361,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             "reviews": pr_reviews,
             "approvals": pr_approvals,
             "changes": pr_changes,
-            "pr_body_url": pr_body_url,
-            "pr_body_url_text": pr_body_url_text,
+            "pr_body_urls_dict": pr_body_urls_dict,
         })
     
     # single newline after the "loading pull request data" line
@@ -388,9 +387,8 @@ def generate_markdown_output(args):
     # Determine if we need to add a URL column
     url_column = False
     if args.url_from_pr_content:
-        # Find the first PR with a matched URL to determine the column header
         for pr in pull_requests:
-            if pr.get("pr_body_url"):
+            if pr.get("pr_body_urls_dict"):
                 url_column = True
                 break
 
@@ -398,7 +396,7 @@ def generate_markdown_output(args):
     output = []
     header = "| Date 🔽 | Title | Author | Change Requested | Approvals |"
     if url_column:
-        header = header[:-1] + " | URL |"
+        header = header[:-1] + " | URLs |"
     output.append(header)
     sep = "| --- | --- | --- | --- | --- |"
     if url_column:
@@ -407,8 +405,9 @@ def generate_markdown_output(args):
     for pr in sorted(pull_requests, key=lambda x: x["date"]):
         row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
         if url_column:
-            if pr.get("pr_body_url"):
-                row = row[:-1] + f" | [{pr['pr_body_url_text']}]({pr['pr_body_url']}) |"
+            if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
+                url_links = " ".join(f"[{text}]({url})" for text, url in pr["pr_body_urls_dict"].items())
+                row = row[:-1] + f" | {url_links} |"
             else:
                 row = row[:-1] + " |  |"
         output.append(row)

@@ -55,8 +55,7 @@ class TestProcessingLogic(unittest.TestCase):
                 "url": "https://github.com/owner/repo/pull/1",
                 "author_name": "John Doe",
                 "author_url": "https://github.com/johndoe",
-                'pr_body_url': None,
-                'pr_body_url_text': None,
+                "pr_body_urls_dict": {},
                 "reviews": 2,
                 "approvals": 1,
                 "changes": 0,
@@ -98,8 +97,7 @@ class TestProcessingLogic(unittest.TestCase):
                 "url": "https://github.com/owner/repo/pull/2",
                 "author_name": "janedoe",  # Fallback to username
                 "author_url": "https://github.com/janedoe",
-                'pr_body_url': None,
-                'pr_body_url_text': None,
+                "pr_body_urls_dict": {},
                 "reviews": 0,
                 "approvals": 0,
                 "changes": 0,
@@ -128,9 +126,10 @@ class TestProcessingLogic(unittest.TestCase):
         mock_fetch_issue_events.return_value = []
         mock_fetch_user_details.return_value = {"name": "Test User", "html_url": "https://github.com/testuser"}
         mock_fetch_reviews.return_value = []
-        # Mock the diff to contain an added line with a URL
+        # Mock the diff to contain added lines with multiple URLs
         mock_fetch_pr_diff.return_value = """
-+ This is an added line with https://example.com/foo/bar123
++ This is an added line with https://example.com/foo/bar123 and https://example.com/foo/baz456
++ Another added line with https://example.com/foo/qux789
 - This is a removed line with https://example.com/foo/shouldnotmatch
 """
         # Regex to match the URL in the added line
@@ -146,8 +145,11 @@ class TestProcessingLogic(unittest.TestCase):
         )
         self.assertEqual(len(prs), 1)
         pr = prs[0]
-        self.assertEqual(pr["pr_body_url"], "https://example.com/foo/bar123")
-        self.assertEqual(pr["pr_body_url_text"], "bar123")
+        self.assertEqual(pr["pr_body_urls_dict"], {
+            "bar123": "https://example.com/foo/bar123",
+            "baz456": "https://example.com/foo/baz456",
+            "qux789": "https://example.com/foo/qux789"
+        })
 
 class TestGenerateMarkdownOutput(unittest.TestCase):
     @patch("gh_pulls_summary.fetch_and_process_pull_requests")
