@@ -254,7 +254,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     """
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
     pull_requests = []
-    print("Loading pull request data...", end="")
+    print("Loading pull request data...", end="", flush=True)
 
     if pr_number:
         # Fetch a single PR
@@ -268,7 +268,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
 
     for pr in prs:
         logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
-        print(".", end="")
+        print(".", end="", flush=True)
 
         # Apply draft filter if specified
         if draft_filter == "no-drafts" and pr.get("draft", False):
@@ -370,7 +370,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         })
     
     # single newline after the "loading pull request data" line
-    print(".")
+    print(".", flush=True)
 
     return pull_requests
 
@@ -442,7 +442,7 @@ def main() -> int:
 
     # Ensure owner and repo are provided
     if not args.owner or not args.repo:
-        print("ERROR: Repository owner and name must be specified, either via arguments or local Git metadata.")
+        print("ERROR: Repository owner and name must be specified, either via arguments or local Git metadata.", file=sys.stderr)
         return 1
 
     configure_logging(args.debug)
