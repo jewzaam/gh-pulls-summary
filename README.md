@@ -96,6 +96,32 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ## Usage
 
+```
+python gh_pulls_summary.py [OPTIONS]
+```
+
+### Options
+
+- `--owner`: The owner of the repository (e.g., 'microsoft'). If not specified, defaults to the owner from the current directory's Git config.
+- `--repo`: The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.
+- `--pr-number`: Specify a single pull request number to query.
+- `--draft-filter`: Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts.
+- `--file-include`: Regex pattern to include pull requests based on changed file paths. Can be specified multiple times.
+- `--file-exclude`: Regex pattern to exclude pull requests based on changed file paths. Can be specified multiple times.
+- `--url-from-pr-content`: Regex pattern to extract all unique URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs.
+- `--output-markdown`: Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only.
+- `--debug`: Enable debug logging and show tracebacks on error.
+
+### Example
+
+Extract all unique URLs from PR diffs and write the summary to a file:
+
+```
+python gh_pulls_summary.py --owner myorg --repo myrepo --url-from-pr-content 'https://example.com/[^\s]+' --output-markdown /tmp/summary.md
+```
+
+If you do not specify `--output-markdown`, the Markdown summary (with timestamp) will be printed to the terminal.
+
 ### Running Against a Public Repository (No Authentication)
 You can run the tool against a public repository without authentication. However, note that the GitHub API imposes a rate limit of **60 requests per hour** for unauthenticated requests.
 

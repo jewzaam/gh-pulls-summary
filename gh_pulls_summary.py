@@ -9,7 +9,6 @@ import logging
 import argcomplete
 import subprocess
 import re
-import datetime
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -67,8 +66,8 @@ def parse_arguments():
     default_owner, default_repo = get_repo_and_owner_from_git()
 
     parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
-    parser.add_argument("--owner", default=default_owner, help="The owner of the repository (e.g., 'microsoft').")
-    parser.add_argument("--repo", default=default_repo, help="The name of the repository (e.g., 'vscode').")
+    parser.add_argument("--owner", default=default_owner, help="The owner of the repository (e.g., 'microsoft'). If not specified, defaults to the owner from the current directory's Git config.")
+    parser.add_argument("--repo", default=default_repo, help="The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.")
     parser.add_argument(
         "--pr-number",
         type=int,
@@ -92,17 +91,17 @@ def parse_arguments():
     parser.add_argument(
         "--url-from-pr-content",
         type=str,
-        help="Regex pattern to extract a URL from the PR body. If set, adds a column to the output table with the matched URL."
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging."
+        help="Regex pattern to extract all unique URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs."
     )
     parser.add_argument(
         "--output-markdown",
         type=str,
-        help="Path to write the generated Markdown output. If not set, does not write to file."
+        help="Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only."
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging and show tracebacks on error."
     )
 
     # Enable tab completion
