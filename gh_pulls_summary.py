@@ -427,7 +427,7 @@ def print_markdown_output(markdown_output):
     print(markdown_output)
 
 
-def main():
+def main(exit_on_error=True):
     """
     Main function to fetch and summarize GitHub pull requests.
     """
@@ -436,7 +436,10 @@ def main():
     # Ensure owner and repo are provided
     if not args.owner or not args.repo:
         print("ERROR: Repository owner and name must be specified, either via arguments or local Git metadata.", file=sys.stderr)
-        sys.exit(1)
+        if exit_on_error:
+            sys.exit(1)
+        else:
+            return 1
 
     configure_logging(args.debug)
 
@@ -452,8 +455,11 @@ def main():
             import traceback
             traceback.print_exc()
         else:
-            print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+            print(f"ERROR: {e}", file=sys.stderr)
+        if exit_on_error:
+            sys.exit(1)
+        else:
+            return 1
 
 
 if __name__ == "__main__":  # pragma: no cover

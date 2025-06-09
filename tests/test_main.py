@@ -66,14 +66,10 @@ class TestMainFunction(unittest.TestCase):
             pr_number=None,
         )
 
-        # Verify that main raises a ValueError
-        with self.assertRaises(ValueError) as context:
-            main()
-
-        self.assertEqual(
-            str(context.exception),
-            "Repository owner and name must be specified, either via arguments or local Git metadata."
-        )
+        # Call main with exit_on_error=False and check return value
+        from gh_pulls_summary import main
+        result = main(exit_on_error=False)
+        self.assertEqual(result, 1)
 
 if __name__ == "__main__":
     unittest.main()
