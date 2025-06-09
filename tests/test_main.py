@@ -99,6 +99,47 @@ class TestMainFunction(unittest.TestCase):
         with self.assertRaises(MissingRepoError):
             main()
 
+    @patch("gh_pulls_summary.generate_markdown_output")
+    @patch("gh_pulls_summary.generate_timestamp")
+    @patch("gh_pulls_summary.parse_arguments")
+    def test_main_output_markdown(self, mock_parse_arguments, mock_generate_timestamp, mock_generate_markdown_output):
+        """Test the main function with --output-markdown argument."""
+        import tempfile, os
+        # Create a temporary file path
+        with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+            output_path = tmpfile.name
+        try:
+            mock_parse_arguments.return_value = MagicMock(
+                owner="owner",
+                repo="repo",
+                draft_filter=None,
+                debug=False,
+                pr_number=None,
+                file_include=None,
+                file_exclude=None,
+                url_from_pr_content=None,
+                output_markdown=output_path
+            )
+            mock_generate_timestamp.return_value = "**Generated at 2025-05-14 15:12Z**\n"
+            mock_generate_markdown_output.return_value = (
+                "| Date | Title | Author | Reviews | Approvals |\n"
+                "| --- | --- | --- | --- | --- |\n"
+                "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |"
+            )
+            # Patch print to ensure nothing is printed
+            with patch("builtins.print") as mock_print:
+                main()
+            mock_generate_markdown_output.assert_called_once_with(mock_parse_arguments.return_value)
+            mock_generate_timestamp.assert_called_once()
+            mock_print.assert_not_called()
+            # Check file contents
+            with open(output_path, "r", encoding="utf-8") as f:
+                file_content = f.read()
+            expected = "**Generated at 2025-05-14 15:12Z**\n\n| Date | Title | Author | Reviews | Approvals |\n| --- | --- | --- | --- | --- |\n| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |\n"
+            self.assertEqual(file_content, expected)
+        finally:
+            os.remove(output_path)
+
 class TestGithubApiHelpers(unittest.TestCase):
     @patch("gh_pulls_summary.github_api_request")
     def test_fetch_single_pull_request(self, mock_github_api_request):
