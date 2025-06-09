@@ -440,16 +440,25 @@ def main():
 
     # Ensure owner and repo are provided
     if not args.owner or not args.repo:
-        raise ValueError("Repository owner and name must be specified, either via arguments or local Git metadata.")
+        print("ERROR: Repository owner and name must be specified, either via arguments or local Git metadata.", file=sys.stderr)
+        sys.exit(1)
 
     configure_logging(args.debug)
 
-    # Generate Markdown output
-    markdown_output = generate_markdown_output(args)
+    try:
+        # Generate Markdown output
+        markdown_output = generate_markdown_output(args)
 
-    # Print timestamp and Markdown output
-    print_timestamp()
-    print_markdown_output(markdown_output)
+        # Print timestamp and Markdown output
+        print_timestamp()
+        print_markdown_output(markdown_output)
+    except Exception as e:
+        if args.debug:
+            import traceback
+            traceback.print_exc()
+        else:
+            print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
