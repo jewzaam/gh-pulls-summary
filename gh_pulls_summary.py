@@ -385,12 +385,7 @@ def generate_markdown_output(args):
     )
 
     # Determine if we need to add a URL column
-    url_column = False
-    if args.url_from_pr_content:
-        for pr in pull_requests:
-            if pr.get("pr_body_urls_dict"):
-                url_column = True
-                break
+    url_column = bool(args.url_from_pr_content)
 
     # Generate Markdown output
     output = []
