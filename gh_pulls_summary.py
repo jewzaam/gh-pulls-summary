@@ -254,7 +254,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     """
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
     pull_requests = []
-    print("Loading pull request data...", end="", flush=True)
+    logging.info("Loading pull request data...")
 
     if pr_number:
         # Fetch a single PR
@@ -268,7 +268,6 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
 
     for pr in prs:
         logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
-        print(".", end="", flush=True)
 
         # Apply draft filter if specified
         if draft_filter == "no-drafts" and pr.get("draft", False):
@@ -368,9 +367,8 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             "changes": pr_changes,
             "pr_body_urls_dict": pr_body_urls_dict,
         })
-    
-    # single newline after the "loading pull request data" line
-    print(".", flush=True)
+
+    logging.info("Done loading PR data.")    
 
     return pull_requests
 
@@ -414,62 +412,54 @@ def generate_markdown_output(args):
     return "\n".join(output)
 
 
-def print_timestamp(current_time=None):
+def generate_timestamp(current_time=None):
     """
-    Prints the current timestamp in Markdown syntax and returns it as a string.
+    Returns the current timestamp in Markdown syntax.
     """
     from datetime import datetime, timezone
     if current_time is None:
         current_time = datetime.now(timezone.utc)
     timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**\n")
-    print(timestamp)
     return timestamp
 
 
-def print_markdown_output(markdown_output):
-    """
-    Prints the Markdown output and returns it as a string.
-    """
-    print(markdown_output)
-    return markdown_output
+class MissingRepoError(Exception):
+    pass
 
 
-def main() -> int:
+def main():
     """
-    Main function to fetch and summarize GitHub pull requests.  Returned value is exit code.
+    Main function to fetch and summarize GitHub pull requests.
     """
     args = parse_arguments()
 
     # Ensure owner and repo are provided
     if not args.owner or not args.repo:
-        print("ERROR: Repository owner and name must be specified, either via arguments or local Git metadata.", file=sys.stderr)
-        return 1
+        raise MissingRepoError("Repository owner and name must be specified, either via arguments or local Git metadata.")
 
     configure_logging(args.debug)
 
-    try:
-        # Generate Markdown output
-        markdown_output = generate_markdown_output(args)
+    # Generate Markdown output
+    markdown_output = generate_markdown_output(args)
 
-        # Print timestamp and Markdown output, and capture their values
-        timestamp_str = print_timestamp()
-        markdown_str = print_markdown_output(markdown_output)
+    # Print timestamp and Markdown output, and capture their values
+    timestamp_output = generate_timestamp()
 
-        # Write Markdown output (with timestamp) to file, matching CLI output
-        if args.output_markdown:
-            with open(args.output_markdown, "w", encoding="utf-8") as f:
-                f.write(f"{timestamp_str}\n{markdown_str}\n")
-    except Exception as e:
-        if args.debug:
-            import traceback
-            traceback.print_exc()
-        else:
-            print(f"ERROR: {e}", file=sys.stderr)
-        return 1
-    
-    # successful execution
-    return 0
+    # Write Markdown output (with timestamp) to file, else write to stdout
+    if args.output_markdown:
+        with open(args.output_markdown, "w", encoding="utf-8") as f:
+            f.write(f"{timestamp_output}\n{markdown_output}\n")
+    else:
+        print(f"{timestamp_output}\n{markdown_output}\n")
 
 
 if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())
+    try:
+        main()
+    except MissingRepoError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
