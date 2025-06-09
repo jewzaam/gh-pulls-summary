@@ -99,6 +99,11 @@ def parse_arguments():
         action="store_true",
         help="Enable debug logging."
     )
+    parser.add_argument(
+        "--output-markdown",
+        type=str,
+        help="Path to write the generated Markdown output. If not set, does not write to file."
+    )
 
     # Enable tab completion
     argcomplete.autocomplete(parser)
@@ -411,20 +416,22 @@ def generate_markdown_output(args):
 
 def print_timestamp(current_time=None):
     """
-    Prints the current timestamp in Markdown syntax.
+    Prints the current timestamp in Markdown syntax and returns it as a string.
     """
     from datetime import datetime, timezone
     if current_time is None:
         current_time = datetime.now(timezone.utc)
-    timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**")
-    print(f"{timestamp}\n")
+    timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**\n")
+    print(timestamp)
+    return timestamp
 
 
 def print_markdown_output(markdown_output):
     """
-    Prints the Markdown output.
+    Prints the Markdown output and returns it as a string.
     """
     print(markdown_output)
+    return markdown_output
 
 
 def main(exit_on_error=True):
@@ -447,9 +454,14 @@ def main(exit_on_error=True):
         # Generate Markdown output
         markdown_output = generate_markdown_output(args)
 
-        # Print timestamp and Markdown output
-        print_timestamp()
-        print_markdown_output(markdown_output)
+        # Print timestamp and Markdown output, and capture their values
+        timestamp_str = print_timestamp()
+        markdown_str = print_markdown_output(markdown_output)
+
+        # Write Markdown output (with timestamp) to file, matching CLI output
+        if args.output_markdown:
+            with open(args.output_markdown, "w", encoding="utf-8") as f:
+                f.write(f"{timestamp_str}\n{markdown_str}\n")
     except Exception as e:
         if args.debug:
             import traceback
