@@ -140,6 +140,36 @@ class TestMainFunction(unittest.TestCase):
         finally:
             os.remove(output_path)
 
+    @patch("gh_pulls_summary.generate_markdown_output")
+    @patch("gh_pulls_summary.generate_timestamp")
+    @patch("gh_pulls_summary.parse_arguments")
+    def test_main_url_from_pr_content(self, mock_parse_arguments, mock_generate_timestamp, mock_generate_markdown_output):
+        """Test the main function with --url-from-pr-content argument."""
+        mock_parse_arguments.return_value = MagicMock(
+            owner="owner",
+            repo="repo",
+            draft_filter=None,
+            debug=False,
+            pr_number=None,
+            file_include=None,
+            file_exclude=None,
+            url_from_pr_content=r"https://example.com/[^\s]+",
+            output_markdown=None
+        )
+        mock_generate_timestamp.return_value = "**Generated at 2025-05-14 15:12Z**\n"
+        mock_generate_markdown_output.return_value = (
+            "| Date 🔽 | Title | Author | Change Requested | Approvals | URLs |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 | [bar123](https://example.com/foo/bar123) [baz456](https://example.com/foo/baz456) |"
+        )
+        with patch("builtins.print") as mock_print:
+            main()
+        mock_generate_markdown_output.assert_called_once_with(mock_parse_arguments.return_value)
+        mock_generate_timestamp.assert_called_once()
+        mock_print.assert_called_once_with(
+            "**Generated at 2025-05-14 15:12Z**\n\n| Date 🔽 | Title | Author | Change Requested | Approvals | URLs |\n| --- | --- | --- | --- | --- | --- |\n| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 | [bar123](https://example.com/foo/bar123) [baz456](https://example.com/foo/baz456) |\n"
+        )
+
 class TestGithubApiHelpers(unittest.TestCase):
     @patch("gh_pulls_summary.github_api_request")
     def test_fetch_single_pull_request(self, mock_github_api_request):
