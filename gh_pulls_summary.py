@@ -266,7 +266,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     url_regex_compiled = re.compile(url_from_pr_content) if url_from_pr_content else None
 
     for pr in prs:
-        logging.debug(f"Processing PR #{pr['number']}: {pr['title']}")
+        logging.info(f"Processing PR #{pr['number']} - {pr['title']}")
 
         # Apply draft filter if specified
         if draft_filter == "no-drafts" and pr.get("draft", False):
