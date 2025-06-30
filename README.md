@@ -4,6 +4,12 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ---
 
+## About This Project's Creation
+
+This repository, including all code, tests, and documentation, was created with the assistance of GitHub Copilot. All implementation, design, and documentation tasks involved AI-powered code generation and suggestions from GitHub Copilot, but every change is carefully reviewed and manual updates are made where necessary. Suggestions are never taken as-is; all code and documentation are edited and refined to ensure correctness and quality.
+
+---
+
 ## Features
 - Fetch pull requests from public or private repositories.
 - Filter pull requests based on draft status (`only-drafts`, `no-drafts`, or no filter).
