@@ -26,10 +26,24 @@ class TestMainFunction(unittest.TestCase):
             file_include = None
             file_exclude = None
             url_from_pr_content = None
+            column_title = None
+            sort_column = "date"
         args = Args()
         # Patch fetch_and_process_pull_requests to avoid network
         with patch("gh_pulls_summary.fetch_and_process_pull_requests") as mock_fetch:
             mock_fetch.return_value = [
+                {
+                    "date": "2025-05-02",
+                    "title": "Fix bug Y",
+                    "number": 124,
+                    "url": "https://github.com/owner/repo/pull/124",
+                    "author_name": "Jane Smith",
+                    "author_url": "https://github.com/janesmith",
+                    "reviews": 1,
+                    "approvals": 1,
+                    "changes": 0,
+                    "pr_body_urls_dict": {},
+                },
                 {
                     "date": "2025-05-01",
                     "title": "Add feature X",
@@ -47,7 +61,8 @@ class TestMainFunction(unittest.TestCase):
         expected_output = (
             "| Date 🔽 | Title | Author | Change Requested | Approvals |\n"
             "| --- | --- | --- | --- | --- |\n"
-            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 |"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 |\n"
+            "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 0 | 1 of 1 |"
         )
         self.assertEqual(markdown_output, expected_output)
 
@@ -63,6 +78,7 @@ class TestMainFunction(unittest.TestCase):
             file_exclude = None
             url_from_pr_content = None
             column_title = ["date=Ready Date", "approvals=Total Approvals"]
+            sort_column = "date"
         args = Args()
         with patch("gh_pulls_summary.fetch_and_process_pull_requests") as mock_fetch:
             mock_fetch.return_value = [
@@ -81,8 +97,58 @@ class TestMainFunction(unittest.TestCase):
             ]
             markdown_output = generate_markdown_output(args)
         expected_output = (
-            "| Ready Date | Title | Author | Change Requested | Total Approvals |\n"
+            "| Ready Date 🔽 | Title | Author | Change Requested | Total Approvals |\n"
             "| --- | --- | --- | --- | --- |\n"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 |"
+        )
+        self.assertEqual(markdown_output, expected_output)
+
+    def test_generate_markdown_output_sort_by_approvals(self):
+        """Test generate_markdown_output with sort_column=approvals."""
+        class Args:
+            owner = "owner"
+            repo = "repo"
+            draft_filter = None
+            debug = False
+            pr_number = None
+            file_include = None
+            file_exclude = None
+            url_from_pr_content = None
+            column_title = None
+            sort_column = "approvals"
+        args = Args()
+        with patch("gh_pulls_summary.fetch_and_process_pull_requests") as mock_fetch:
+            mock_fetch.return_value = [
+                {
+                    "date": "2025-05-01",
+                    "title": "Add feature X",
+                    "number": 123,
+                    "url": "https://github.com/owner/repo/pull/123",
+                    "author_name": "John Doe",
+                    "author_url": "https://github.com/johndoe",
+                    "reviews": 2,
+                    "approvals": 2,
+                    "changes": 1,
+                    "pr_body_urls_dict": {},
+                },
+                {
+                    "date": "2025-05-02",
+                    "title": "Fix bug Y",
+                    "number": 124,
+                    "url": "https://github.com/owner/repo/pull/124",
+                    "author_name": "Jane Smith",
+                    "author_url": "https://github.com/janesmith",
+                    "reviews": 1,
+                    "approvals": 1,
+                    "changes": 0,
+                    "pr_body_urls_dict": {},
+                }
+            ]
+            markdown_output = generate_markdown_output(args)
+        expected_output = (
+            "| Date | Title | Author | Change Requested | Approvals 🔽 |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 0 | 1 of 1 |\n"
             "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 |"
         )
         self.assertEqual(markdown_output, expected_output)

@@ -108,6 +108,12 @@ def parse_arguments():
         action="append",
         help="Override the title for any output column. Format: COLUMN=TITLE. Valid COLUMN values: date, title, author, changes, approvals, urls. Can be specified multiple times."
     )
+    parser.add_argument(
+        "--sort-column",
+        type=str,
+        default="date",
+        help="Specify which output column to sort by. Valid values: date, title, author, changes, approvals, urls. Default is 'date'."
+    )
 
     # Enable tab completion
     argcomplete.autocomplete(parser)
@@ -396,7 +402,7 @@ def generate_markdown_output(args):
 
     # Handle custom column titles
     default_titles = {
-        "date": "Date 🔽",
+        "date": "Date",
         "title": "Title",
         "author": "Author",
         "changes": "Change Requested",
@@ -413,6 +419,18 @@ def generate_markdown_output(args):
                     custom_titles[col] = val.strip()
     titles = {**default_titles, **custom_titles}
 
+    # Validate sort column
+    sort_column = getattr(args, "sort_column", "date").lower()
+    allowed_columns = list(default_titles.keys())
+    if sort_column not in allowed_columns:
+        raise ValueError(f"Invalid sort column: {sort_column}. Must be one of: {', '.join(allowed_columns)}")
+
+    # Add down arrow to sorted column
+    for col in allowed_columns:
+        if col == sort_column:
+            titles[col] = titles[col] + " 🔽"
+            break
+
     # Generate Markdown output
     output = []
     header = f"| {titles['date']} | {titles['title']} | {titles['author']} | {titles['changes']} | {titles['approvals']} |"
@@ -423,7 +441,14 @@ def generate_markdown_output(args):
     if url_column:
         sep = sep[:-1] + " | --- |"
     output.append(sep)
-    for pr in sorted(pull_requests, key=lambda x: x["date"]):
+    # Sort by the selected column
+    def sort_key(pr):
+        key = sort_column
+        if key == "urls":
+            return ",".join(pr.get("pr_body_urls_dict", {}).keys()) if pr.get("pr_body_urls_dict") else ""
+        return pr.get(key, "")
+    sorted_prs = sorted(pull_requests, key=sort_key)
+    for pr in sorted_prs:
         row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
         if url_column:
             if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:

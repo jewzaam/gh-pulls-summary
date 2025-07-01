@@ -118,16 +118,18 @@ python gh_pulls_summary.py [OPTIONS]
 - `--output-markdown`: Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only.
 - `--debug`: Enable debug logging and show tracebacks on error.
 - `--column-title`: Override the title for any output column. Format: `COLUMN=TITLE`. Valid COLUMN values: `date`, `title`, `author`, `changes`, `approvals`, `urls`. Can be specified multiple times.
+- `--sort-column`: Specify which output column to sort by. Valid values: `date`, `title`, `author`, `changes`, `approvals`, `urls`. Default is `date`.
 
 ### Example
 
-Extract all unique URLs from PR diffs, write the summary to a file, and override the column titles:
+Extract all unique URLs from PR diffs, write the summary to a file, override the column titles, and sort by approvals:
 
 ```
 python gh_pulls_summary.py --owner myorg --repo myrepo \
   --url-from-pr-content 'https://example.com/[^\s]+' \
   --output-markdown /tmp/summary.md \
-  --column-title date="Ready Date" --column-title approvals="Total Approvals"
+  --column-title date="Ready Date" --column-title approvals="Total Approvals" \
+  --sort-column approvals
 ```
 
 If you do not specify `--output-markdown`, the Markdown summary (with timestamp) will be printed to the terminal.
