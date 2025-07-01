@@ -51,6 +51,42 @@ class TestMainFunction(unittest.TestCase):
         )
         self.assertEqual(markdown_output, expected_output)
 
+    def test_generate_markdown_output_with_custom_titles(self):
+        """Test generate_markdown_output with custom column titles."""
+        class Args:
+            owner = "owner"
+            repo = "repo"
+            draft_filter = None
+            debug = False
+            pr_number = None
+            file_include = None
+            file_exclude = None
+            url_from_pr_content = None
+            column_title = ["date=Ready Date", "approvals=Total Approvals"]
+        args = Args()
+        with patch("gh_pulls_summary.fetch_and_process_pull_requests") as mock_fetch:
+            mock_fetch.return_value = [
+                {
+                    "date": "2025-05-01",
+                    "title": "Add feature X",
+                    "number": 123,
+                    "url": "https://github.com/owner/repo/pull/123",
+                    "author_name": "John Doe",
+                    "author_url": "https://github.com/johndoe",
+                    "reviews": 2,
+                    "approvals": 2,
+                    "changes": 1,
+                    "pr_body_urls_dict": {},
+                }
+            ]
+            markdown_output = generate_markdown_output(args)
+        expected_output = (
+            "| Ready Date | Title | Author | Change Requested | Total Approvals |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 2 |"
+        )
+        self.assertEqual(markdown_output, expected_output)
+
     @patch("gh_pulls_summary.generate_markdown_output")
     @patch("gh_pulls_summary.generate_timestamp")
     @patch("gh_pulls_summary.parse_arguments")

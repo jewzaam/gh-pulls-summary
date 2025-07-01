@@ -103,6 +103,11 @@ def parse_arguments():
         action="store_true",
         help="Enable debug logging and show tracebacks on error."
     )
+    parser.add_argument(
+        "--column-title",
+        action="append",
+        help="Override the title for any output column. Format: COLUMN=TITLE. Valid COLUMN values: date, title, author, changes, approvals, urls. Can be specified multiple times."
+    )
 
     # Enable tab completion
     argcomplete.autocomplete(parser)
@@ -389,11 +394,30 @@ def generate_markdown_output(args):
     # Determine if we need to add a URL column
     url_column = bool(args.url_from_pr_content)
 
+    # Handle custom column titles
+    default_titles = {
+        "date": "Date 🔽",
+        "title": "Title",
+        "author": "Author",
+        "changes": "Change Requested",
+        "approvals": "Approvals",
+        "urls": "URLs"
+    }
+    custom_titles = {}
+    if hasattr(args, "column_title") and args.column_title:
+        for entry in args.column_title:
+            if "=" in entry:
+                col, val = entry.split("=", 1)
+                col = col.strip().lower()
+                if col in default_titles:
+                    custom_titles[col] = val.strip()
+    titles = {**default_titles, **custom_titles}
+
     # Generate Markdown output
     output = []
-    header = "| Date 🔽 | Title | Author | Change Requested | Approvals |"
+    header = f"| {titles['date']} | {titles['title']} | {titles['author']} | {titles['changes']} | {titles['approvals']} |"
     if url_column:
-        header = header[:-1] + " | URLs |"
+        header = header[:-1] + f" | {titles['urls']} |"
     output.append(header)
     sep = "| --- | --- | --- | --- | --- |"
     if url_column:

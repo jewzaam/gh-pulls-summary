@@ -117,13 +117,17 @@ python gh_pulls_summary.py [OPTIONS]
 - `--url-from-pr-content`: Regex pattern to extract all unique URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs.
 - `--output-markdown`: Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only.
 - `--debug`: Enable debug logging and show tracebacks on error.
+- `--column-title`: Override the title for any output column. Format: `COLUMN=TITLE`. Valid COLUMN values: `date`, `title`, `author`, `changes`, `approvals`, `urls`. Can be specified multiple times.
 
 ### Example
 
-Extract all unique URLs from PR diffs and write the summary to a file:
+Extract all unique URLs from PR diffs, write the summary to a file, and override the column titles:
 
 ```
-python gh_pulls_summary.py --owner myorg --repo myrepo --url-from-pr-content 'https://example.com/[^\s]+' --output-markdown /tmp/summary.md
+python gh_pulls_summary.py --owner myorg --repo myrepo \
+  --url-from-pr-content 'https://example.com/[^\s]+' \
+  --output-markdown /tmp/summary.md \
+  --column-title date="Ready Date" --column-title approvals="Total Approvals"
 ```
 
 If you do not specify `--output-markdown`, the Markdown summary (with timestamp) will be printed to the terminal.
