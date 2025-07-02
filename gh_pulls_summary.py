@@ -137,6 +137,7 @@ def github_api_request(endpoint, params=None, use_paging=True):
     """
     Makes a GitHub API request and optionally handles pagination.
     Returns all results across all pages if pagination is enabled.
+    Returns None if no results are found or an error occurs.
     """
     if params is None:
         params = {}
@@ -150,18 +151,27 @@ def github_api_request(endpoint, params=None, use_paging=True):
             params["page"] = page
         url = f"{GITHUB_API_BASE}{endpoint}"
         logging.debug(f"Making API request to {url} with params {params}")
-        response = requests.get(url, headers=HEADERS, params=params)
+        
+        try:
+            response = requests.get(url, headers=HEADERS, params=params)
+        except Exception as e:
+            logging.error(f"Network error making API request: {e}")
+            return None
 
         if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
             raise Exception("Rate limit exceeded. Consider using a GitHub token to increase the limit.")
         if response.status_code != 200:
             raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
 
-        results = response.json()
+        try:
+            results = response.json()
+        except Exception as e:
+            logging.error(f"Error parsing JSON response: {e}")
+            return None
 
         if results == last_results: # pragma: no cover
             logging.warning(f"Duplicate results detected for pages {page-1} and {page}. Stopping pagination.")
-            return None
+            break
 
         # Handle cases where the response is a dictionary
         if isinstance(results, dict):
@@ -269,10 +279,16 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     if pr_number:
         # Fetch a single PR
         pr = fetch_single_pull_request(owner, repo, pr_number)
+        if pr is None:
+            logging.error(f"Failed to fetch PR #{pr_number}")
+            return []
         prs = [pr]  # Wrap in a list for consistent processing
     else:
         # Fetch all PRs
         prs = fetch_pull_requests(owner, repo)
+        if prs is None:
+            logging.error("Failed to fetch pull requests")
+            return []
 
     url_regex_compiled = re.compile(url_from_pr_content) if url_from_pr_content else None
 
@@ -293,6 +309,9 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         if file_include or file_exclude:
             # Fetch files changed in the PR
             files = fetch_pr_files(owner, repo, pr_number)
+            if files is None:
+                logging.warning(f"Failed to fetch files for PR #{pr_number}, skipping file filters")
+                files = []
             file_paths = [file["filename"] for file in files]
 
             # Check file-exclude filters first
@@ -312,12 +331,13 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         # Determine when the PR was last marked as ready for review
         pr_ready_date = None
         events = fetch_issue_events(owner, repo, pr_number)
-        for event in events:
-            if event["event"] == "ready_for_review":
-                event_date = event["created_at"]
-                logging.debug(f"PR #{pr_number} marked ready for review on {event_date}")
-                if not pr_ready_date or event_date > pr_ready_date:
-                    pr_ready_date = event_date
+        if events is not None:
+            for event in events:
+                if event["event"] == "ready_for_review":
+                    event_date = event["created_at"]
+                    logging.debug(f"PR #{pr_number} marked ready for review on {event_date}")
+                    if not pr_ready_date or event_date > pr_ready_date:
+                        pr_ready_date = event_date
 
         if not pr_ready_date:
             pr_ready_date = pr["created_at"]
@@ -326,11 +346,20 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
 
         # Fetch author details
         author_details = fetch_user_details(pr_author)
-        pr_author_name = author_details.get("name") or pr_author  # Fallback to username if name is None
-        pr_author_url = author_details.get("html_url")
+        if author_details is not None:
+            pr_author_name = author_details.get("name") or pr_author  # Fallback to username if name is None
+            pr_author_url = author_details.get("html_url")
+        else:
+            logging.warning(f"Failed to fetch author details for {pr_author}, using fallbacks")
+            pr_author_name = pr_author
+            pr_author_url = f"https://github.com/{pr_author}"
 
         # Fetch reviews and approvals
         reviews = fetch_reviews(owner, repo, pr_number)
+        if reviews is None:
+            logging.warning(f"Failed to fetch reviews for PR #{pr_number}")
+            reviews = []
+            
         # Map to most recent review state per user
         user_latest_review = {}
         for review in reviews:
@@ -356,14 +385,17 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         pr_body_urls_dict = {}
         if url_regex_compiled:
             diff = fetch_pr_diff(owner, repo, pr_number)
-            for line in diff.splitlines():
-                if line.startswith('+') and not line.startswith('+++'):
-                    matches = url_regex_compiled.findall(line)
-                    for match in matches:
-                        url_text = match.rstrip("/").split("/")[-1] if "/" in match else match
-                        pr_body_urls_dict[url_text] = match  # last occurrence wins if duplicate text
-            # Sort the dict by url_text
-            pr_body_urls_dict = dict(sorted(pr_body_urls_dict.items(), key=lambda x: x[0]))
+            if diff is not None:
+                for line in diff.splitlines():
+                    if line.startswith('+') and not line.startswith('+++'):
+                        matches = url_regex_compiled.findall(line)
+                        for match in matches:
+                            url_text = match.rstrip("/").split("/")[-1] if "/" in match else match
+                            pr_body_urls_dict[url_text] = match  # last occurrence wins if duplicate text
+                # Sort the dict by url_text
+                pr_body_urls_dict = dict(sorted(pr_body_urls_dict.items(), key=lambda x: x[0]))
+            else:
+                logging.warning(f"Failed to fetch diff for PR #{pr_number}")
 
         pull_requests.append({
             "date": pr_ready_date,
@@ -381,6 +413,74 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     logging.info("Done loading PR data.")    
 
     return pull_requests
+
+
+def parse_column_titles(args):
+    """
+    Parses custom column titles from command line arguments.
+    Returns a dictionary with the final column titles to use.
+    """
+    default_titles = {
+        "date": "Date",
+        "title": "Title",
+        "author": "Author",
+        "changes": "Change Requested",
+        "approvals": "Approvals",
+        "urls": "URLs"
+    }
+    custom_titles = {}
+    if hasattr(args, "column_title") and args.column_title:
+        for entry in args.column_title:
+            if "=" in entry:
+                col, val = entry.split("=", 1)
+                col = col.strip().lower()
+                if col in default_titles:
+                    custom_titles[col] = val.strip()
+                else:
+                    logging.warning(f"Invalid column name '{col}' in --column-title. Valid columns: {', '.join(default_titles.keys())}")
+    return {**default_titles, **custom_titles}
+
+
+def validate_sort_column(sort_column):
+    """
+    Validates the sort column and returns it in lowercase.
+    Raises ValueError if invalid.
+    """
+    allowed_columns = ["date", "title", "author", "changes", "approvals", "urls"]
+    sort_column = sort_column.lower()
+    if sort_column not in allowed_columns:
+        raise ValueError(f"Invalid sort column: {sort_column}. Must be one of: {', '.join(allowed_columns)}")
+    return sort_column
+
+
+def create_markdown_table_header(titles, url_column):
+    """
+    Creates the markdown table header and separator rows.
+    Returns a tuple of (header_row, separator_row).
+    """
+    header = f"| {titles['date']} | {titles['title']} | {titles['author']} | {titles['changes']} | {titles['approvals']} |"
+    if url_column:
+        header = header + f" {titles['urls']} |"
+    
+    separator = "| --- | --- | --- | --- | --- |"
+    if url_column:
+        separator = separator + " --- |"
+    
+    return header, separator
+
+
+def create_markdown_table_row(pr, url_column):
+    """
+    Creates a single markdown table row for a pull request.
+    """
+    row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
+    if url_column:
+        if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
+            url_links = " ".join(f"[{text}]({url})" for text, url in pr["pr_body_urls_dict"].items())
+            row = row + f" {url_links} |"
+        else:
+            row = row + " |"
+    return row
 
 
 def generate_markdown_output(args):
@@ -401,62 +501,37 @@ def generate_markdown_output(args):
     url_column = bool(args.url_from_pr_content)
 
     # Handle custom column titles
-    default_titles = {
-        "date": "Date",
-        "title": "Title",
-        "author": "Author",
-        "changes": "Change Requested",
-        "approvals": "Approvals",
-        "urls": "URLs"
-    }
-    custom_titles = {}
-    if hasattr(args, "column_title") and args.column_title:
-        for entry in args.column_title:
-            if "=" in entry:
-                col, val = entry.split("=", 1)
-                col = col.strip().lower()
-                if col in default_titles:
-                    custom_titles[col] = val.strip()
-    titles = {**default_titles, **custom_titles}
+    titles = parse_column_titles(args)
 
     # Validate sort column
-    sort_column = getattr(args, "sort_column", "date").lower()
-    allowed_columns = list(default_titles.keys())
-    if sort_column not in allowed_columns:
-        raise ValueError(f"Invalid sort column: {sort_column}. Must be one of: {', '.join(allowed_columns)}")
+    sort_column = validate_sort_column(getattr(args, "sort_column", "date"))
 
     # Add down arrow to sorted column
-    for col in allowed_columns:
+    for col in titles.keys():
         if col == sort_column:
             titles[col] = titles[col] + " 🔽"
             break
 
     # Generate Markdown output
     output = []
-    header = f"| {titles['date']} | {titles['title']} | {titles['author']} | {titles['changes']} | {titles['approvals']} |"
-    if url_column:
-        header = header[:-1] + f" | {titles['urls']} |"
+    header, separator = create_markdown_table_header(titles, url_column)
     output.append(header)
-    sep = "| --- | --- | --- | --- | --- |"
-    if url_column:
-        sep = sep[:-1] + " | --- |"
-    output.append(sep)
+    output.append(separator)
+    
     # Sort by the selected column
     def sort_key(pr):
         key = sort_column
         if key == "urls":
             return ",".join(pr.get("pr_body_urls_dict", {}).keys()) if pr.get("pr_body_urls_dict") else ""
         return pr.get(key, "")
+    
     sorted_prs = sorted(pull_requests, key=sort_key)
+    
+    # Add data rows
     for pr in sorted_prs:
-        row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
-        if url_column:
-            if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
-                url_links = " ".join(f"[{text}]({url})" for text, url in pr["pr_body_urls_dict"].items())
-                row = row[:-1] + f" | {url_links} |"
-            else:
-                row = row[:-1] + " |  |"
+        row = create_markdown_table_row(pr, url_column)
         output.append(row)
+    
     return "\n".join(output)
 
 

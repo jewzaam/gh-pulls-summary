@@ -311,5 +311,278 @@ class TestGithubApiHelpers(unittest.TestCase):
             fetch_pr_diff("owner", "repo", 99)
         self.assertIn("Failed to fetch PR diff", str(ctx.exception))
 
+class TestHelperFunctions(unittest.TestCase):
+    """Test cases for the newly refactored helper functions."""
+    
+    def test_parse_column_titles_default(self):
+        """Test parse_column_titles with no custom titles."""
+        from gh_pulls_summary import parse_column_titles
+        
+        class Args:
+            column_title = None
+        
+        args = Args()
+        result = parse_column_titles(args)
+        
+        expected = {
+            "date": "Date",
+            "title": "Title",
+            "author": "Author",
+            "changes": "Change Requested",
+            "approvals": "Approvals",
+            "urls": "URLs"
+        }
+        self.assertEqual(result, expected)
+
+    def test_parse_column_titles_with_custom_titles(self):
+        """Test parse_column_titles with custom column titles."""
+        from gh_pulls_summary import parse_column_titles
+        
+        class Args:
+            column_title = ["date=Ready Date", "approvals=Total Approvals", "author=Contributor"]
+        
+        args = Args()
+        result = parse_column_titles(args)
+        
+        expected = {
+            "date": "Ready Date",
+            "title": "Title",
+            "author": "Contributor", 
+            "changes": "Change Requested",
+            "approvals": "Total Approvals",
+            "urls": "URLs"
+        }
+        self.assertEqual(result, expected)
+
+    def test_parse_column_titles_with_invalid_column(self):
+        """Test parse_column_titles with invalid column name."""
+        from gh_pulls_summary import parse_column_titles
+        
+        class Args:
+            column_title = ["date=Ready Date", "invalid=Bad Column", "title=PR Title"]
+        
+        args = Args()
+        
+        with patch("gh_pulls_summary.logging.warning") as mock_warning:
+            result = parse_column_titles(args)
+            mock_warning.assert_called_once_with(
+                "Invalid column name 'invalid' in --column-title. Valid columns: date, title, author, changes, approvals, urls"
+            )
+        
+        # Should ignore invalid column but keep valid ones
+        expected = {
+            "date": "Ready Date",
+            "title": "PR Title",
+            "author": "Author",
+            "changes": "Change Requested", 
+            "approvals": "Approvals",
+            "urls": "URLs"
+        }
+        self.assertEqual(result, expected)
+
+    def test_parse_column_titles_with_malformed_entry(self):
+        """Test parse_column_titles with malformed entries (no equals sign)."""
+        from gh_pulls_summary import parse_column_titles
+        
+        class Args:
+            column_title = ["date=Ready Date", "bad-entry", "title=PR Title"]
+        
+        args = Args()
+        result = parse_column_titles(args)
+        
+        # Should skip malformed entries
+        expected = {
+            "date": "Ready Date",
+            "title": "PR Title", 
+            "author": "Author",
+            "changes": "Change Requested",
+            "approvals": "Approvals",
+            "urls": "URLs"
+        }
+        self.assertEqual(result, expected)
+
+    def test_parse_column_titles_no_attribute(self):
+        """Test parse_column_titles when args doesn't have column_title attribute."""
+        from gh_pulls_summary import parse_column_titles
+        
+        class Args:
+            pass
+        
+        args = Args()
+        result = parse_column_titles(args)
+        
+        # Should return defaults
+        expected = {
+            "date": "Date",
+            "title": "Title",
+            "author": "Author", 
+            "changes": "Change Requested",
+            "approvals": "Approvals",
+            "urls": "URLs"
+        }
+        self.assertEqual(result, expected)
+
+    def test_validate_sort_column_valid(self):
+        """Test validate_sort_column with valid columns."""
+        from gh_pulls_summary import validate_sort_column
+        
+        valid_columns = ["date", "title", "author", "changes", "approvals", "urls"]
+        
+        for col in valid_columns:
+            # Test lowercase
+            result = validate_sort_column(col)
+            self.assertEqual(result, col)
+            
+            # Test uppercase
+            result = validate_sort_column(col.upper())
+            self.assertEqual(result, col)
+            
+            # Test mixed case
+            result = validate_sort_column(col.capitalize())
+            self.assertEqual(result, col)
+
+    def test_validate_sort_column_invalid(self):
+        """Test validate_sort_column with invalid columns."""
+        from gh_pulls_summary import validate_sort_column
+        
+        invalid_columns = ["invalid", "reviews", "status", ""]
+        
+        for col in invalid_columns:
+            with self.assertRaises(ValueError) as ctx:
+                validate_sort_column(col)
+            self.assertIn("Invalid sort column", str(ctx.exception))
+            self.assertIn("Must be one of:", str(ctx.exception))
+
+    def test_create_markdown_table_header_no_url_column(self):
+        """Test create_markdown_table_header without URL column."""
+        from gh_pulls_summary import create_markdown_table_header
+        
+        titles = {
+            "date": "Date 🔽",
+            "title": "Title", 
+            "author": "Author",
+            "changes": "Change Requested",
+            "approvals": "Approvals"
+        }
+        
+        header, separator = create_markdown_table_header(titles, url_column=False)
+        
+        expected_header = "| Date 🔽 | Title | Author | Change Requested | Approvals |"
+        expected_separator = "| --- | --- | --- | --- | --- |"
+        
+        self.assertEqual(header, expected_header)
+        self.assertEqual(separator, expected_separator)
+
+    def test_create_markdown_table_header_with_url_column(self):
+        """Test create_markdown_table_header with URL column."""
+        from gh_pulls_summary import create_markdown_table_header
+        
+        titles = {
+            "date": "Date",
+            "title": "Title",
+            "author": "Author", 
+            "changes": "Change Requested",
+            "approvals": "Approvals 🔽",
+            "urls": "URLs"
+        }
+        
+        header, separator = create_markdown_table_header(titles, url_column=True)
+        
+        expected_header = "| Date | Title | Author | Change Requested | Approvals 🔽 | URLs |"
+        expected_separator = "| --- | --- | --- | --- | --- | --- |"
+        
+        self.assertEqual(header, expected_header)
+        self.assertEqual(separator, expected_separator)
+
+    def test_create_markdown_table_row_no_url_column(self):
+        """Test create_markdown_table_row without URL column."""
+        from gh_pulls_summary import create_markdown_table_row
+        
+        pr = {
+            "date": "2025-05-01",
+            "title": "Add feature X",
+            "number": 123,
+            "url": "https://github.com/owner/repo/pull/123",
+            "author_name": "John Doe",
+            "author_url": "https://github.com/johndoe",
+            "changes": 1,
+            "approvals": 2,
+            "reviews": 3
+        }
+        
+        result = create_markdown_table_row(pr, url_column=False)
+        
+        expected = "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 3 |"
+        self.assertEqual(result, expected)
+
+    def test_create_markdown_table_row_with_url_column_and_urls(self):
+        """Test create_markdown_table_row with URL column and URLs present."""
+        from gh_pulls_summary import create_markdown_table_row
+        
+        pr = {
+            "date": "2025-05-01",
+            "title": "Add feature X", 
+            "number": 123,
+            "url": "https://github.com/owner/repo/pull/123",
+            "author_name": "John Doe",
+            "author_url": "https://github.com/johndoe",
+            "changes": 0,
+            "approvals": 1,
+            "reviews": 1,
+            "pr_body_urls_dict": {
+                "bar123": "https://example.com/foo/bar123",
+                "baz456": "https://example.com/foo/baz456"
+            }
+        }
+        
+        result = create_markdown_table_row(pr, url_column=True)
+        
+        expected = "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 0 | 1 of 1 | [bar123](https://example.com/foo/bar123) [baz456](https://example.com/foo/baz456) |"
+        self.assertEqual(result, expected)
+
+    def test_create_markdown_table_row_with_url_column_no_urls(self):
+        """Test create_markdown_table_row with URL column but no URLs."""
+        from gh_pulls_summary import create_markdown_table_row
+        
+        pr = {
+            "date": "2025-05-02",
+            "title": "Fix bug Y",
+            "number": 124,
+            "url": "https://github.com/owner/repo/pull/124",
+            "author_name": "Jane Smith", 
+            "author_url": "https://github.com/janesmith",
+            "changes": 2,
+            "approvals": 0,
+            "reviews": 2,
+            "pr_body_urls_dict": {}
+        }
+        
+        result = create_markdown_table_row(pr, url_column=True)
+        
+        expected = "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 2 | 0 of 2 | |"
+        self.assertEqual(result, expected)
+
+    def test_create_markdown_table_row_with_url_column_missing_dict(self):
+        """Test create_markdown_table_row with URL column when pr_body_urls_dict is missing."""
+        from gh_pulls_summary import create_markdown_table_row
+        
+        pr = {
+            "date": "2025-05-03",
+            "title": "Update docs",
+            "number": 125, 
+            "url": "https://github.com/owner/repo/pull/125",
+            "author_name": "Bob Wilson",
+            "author_url": "https://github.com/bobwilson",
+            "changes": 0,
+            "approvals": 1,
+            "reviews": 1
+            # No pr_body_urls_dict key
+        }
+        
+        result = create_markdown_table_row(pr, url_column=True)
+        
+        expected = "| 2025-05-03 | Update docs #[125](https://github.com/owner/repo/pull/125) | [Bob Wilson](https://github.com/bobwilson) | 0 | 1 of 1 | |"
+        self.assertEqual(result, expected)
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ This tool fetches and summarizes pull requests from a specified GitHub repositor
 
 ## About This Project's Creation
 
-This repository, including all code, tests, and documentation, was created with the assistance of GitHub Copilot. All implementation, design, and documentation tasks involved AI-powered code generation and suggestions from GitHub Copilot, but every change is carefully reviewed and manual updates are made where necessary. Suggestions are never taken as-is; all code and documentation are edited and refined to ensure correctness and quality.
+This repository, including all code, tests, and documentation, was created with the assistance of GitHub Copilot and Cursor. All implementation, design, and documentation tasks involved AI-powered code generation and suggestions from these tools, but every change is carefully reviewed and manual updates are made where necessary. Suggestions are never taken as-is; all code and documentation are edited and refined to ensure correctness and quality.
 
 ---
 
@@ -19,7 +19,7 @@ This repository, including all code, tests, and documentation, was created with 
   - Author details.
   - Number of reviews and approvals.
 - `--file-include` / `--file-exclude`: Regex patterns to filter PRs by changed file paths.
-- `--url-from-pr-content`: Regex pattern to extract a URL from the PR body. If set, adds a column to the output table with the matched URL.
+- `--url-from-pr-content`: Regex pattern to extract URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs.
 
 ---
 
@@ -34,6 +34,7 @@ This repository, including all code, tests, and documentation, was created with 
 <!--TOC-->
 
 - [GitHub Pull Requests Summary Tool](#github-pull-requests-summary-tool)
+  - [About This Project's Creation](#about-this-projects-creation)
   - [Features](#features)
   - [Requirements](#requirements)
   - [Table of Contents](#table-of-contents)
@@ -41,6 +42,8 @@ This repository, including all code, tests, and documentation, was created with 
     - [Prerequisites](#prerequisites)
     - [Steps](#steps)
   - [Usage](#usage)
+    - [Options](#options)
+    - [Example](#example)
     - [Running Against a Public Repository (No Authentication)](#running-against-a-public-repository-no-authentication)
     - [Running Against a Private Repository (Requires Authentication)](#running-against-a-private-repository-requires-authentication)
   - [Managing GitHub Token Securely](#managing-github-token-securely)
@@ -335,14 +338,14 @@ The tool outputs a Markdown table with the following columns:
 - **Date**: The date the pull request was marked ready for review.
 - **Title**: The title of the pull request, with a link to the pull request.
 - **Author**: The name of the author, with a link to their GitHub profile.
-- **Reviews**: The number of unique reviewers.
-- **Approvals**: The number of unique approvals.
+- **Change Requested**: The number of reviews requesting changes.
+- **Approvals**: The number of approvals out of total reviews (e.g., "2 of 5").
 
 Example Output:
 ````markdown
-| Date 🔽    | Title                                   | Author          | Reviews | Approvals |
-| ---------- | --------------------------------------- | --------------- | ------- | --------- |
-| 2025-05-01 | Add feature X #[123](https://github.com/...) | [John Doe](https://github.com/johndoe) | 3       | 2         |
-| 2025-05-02 | Fix bug Y #[124](https://github.com/...) | [Jane Smith](https://github.com/janesmith) | 1       | 1         |
+| Date 🔽    | Title                                   | Author          | Change Requested | Approvals |
+| ---------- | --------------------------------------- | --------------- | ---------------- | --------- |
+| 2025-05-01 | Add feature X #[123](https://github.com/...) | [John Doe](https://github.com/johndoe) | 1            | 2 of 3    |
+| 2025-05-02 | Fix bug Y #[124](https://github.com/...) | [Jane Smith](https://github.com/janesmith) | 0            | 1 of 1    |
 ````
 
