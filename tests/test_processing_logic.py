@@ -1,7 +1,7 @@
 import unittest
 import logging
 from unittest.mock import patch, MagicMock
-from gh_pulls_summary import fetch_and_process_pull_requests, generate_markdown_output
+from gh_pulls_summary import fetch_and_process_pull_requests, generate_markdown_output, generate_timestamp
 
 # Configure logging for tests
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -286,6 +286,19 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
         # Fix expected_output dates to match mock data
         expected_output = expected_output.replace("2025-02", "2025-05-02").replace("2025-01", "2025-05-01")
         self.assertEqual(markdown_output, expected_output)
+
+    @patch("gh_pulls_summary.fetch_and_process_pull_requests")
+    def test_generate_timestamp_with_generator(self, mock_fetch_and_process_pull_requests):
+        from datetime import datetime, timezone
+        # With name and url
+        ts = generate_timestamp(datetime(2025, 7, 2, 12, 0, tzinfo=timezone.utc), generator_name="octocat", generator_url="https://github.com/octocat")
+        self.assertEqual(ts, "**Generated at 2025-07-02 12:00Z** by [octocat](https://github.com/octocat)\n")
+        # With name only
+        ts2 = generate_timestamp(datetime(2025, 7, 2, 12, 0, tzinfo=timezone.utc), generator_name="octocat", generator_url=None)
+        self.assertEqual(ts2, "**Generated at 2025-07-02 12:00Z** by octocat\n")
+        # With neither
+        ts3 = generate_timestamp(datetime(2025, 7, 2, 12, 0, tzinfo=timezone.utc))
+        self.assertEqual(ts3, "**Generated at 2025-07-02 12:00Z**\n")
 
 if __name__ == "__main__":
     unittest.main()

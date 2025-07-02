@@ -460,19 +460,41 @@ def generate_markdown_output(args):
     return "\n".join(output)
 
 
-def generate_timestamp(current_time=None):
+def generate_timestamp(current_time=None, generator_name=None, generator_url=None):
     """
-    Returns the current timestamp in Markdown syntax.
+    Returns the current timestamp in Markdown syntax, including the generator's name and link if provided.
     """
     from datetime import datetime, timezone
     if current_time is None:
         current_time = datetime.now(timezone.utc)
-    timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**\n")
+    timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**")
+    if generator_name and generator_url:
+        timestamp += f" by [{generator_name}]({generator_url})"
+    elif generator_name:
+        timestamp += f" by {generator_name}"
+    timestamp += "\n"
     return timestamp
 
 
 class MissingRepoError(Exception):
     pass
+
+
+def get_authenticated_user_info():
+    """
+    Fetch the authenticated user's info from the GitHub API.
+    Returns (name, html_url) or (None, None) if not available.
+    """
+    try:
+        resp = requests.get("https://api.github.com/user", headers=HEADERS, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            name = data.get("name") or data.get("login")
+            html_url = data.get("html_url")
+            return name, html_url
+    except Exception:
+        pass
+    return None, None
 
 
 def main():
@@ -490,8 +512,11 @@ def main():
     # Generate Markdown output
     markdown_output = generate_markdown_output(args)
 
+    # Determine user info using GitHub API /user if possible
+    name, url = get_authenticated_user_info()
+
     # Print timestamp and Markdown output, and capture their values
-    timestamp_output = generate_timestamp()
+    timestamp_output = generate_timestamp(generator_name=name, generator_url=url)
 
     # Write Markdown output (with timestamp) to file, else write to stdout
     if args.output_markdown:
