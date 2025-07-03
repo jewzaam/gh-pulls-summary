@@ -75,8 +75,8 @@ This repository, including all code, tests, and documentation, was created with 
 ## Installation
 
 ### Prerequisites
-- Ensure you have `make` installed on your system.
 - Python 3.6 or later is required.
+- Ensure you have `make` installed on your system (optional, for automated setup).
 
 ### Steps
 1. Clone the repository:
@@ -85,27 +85,59 @@ This repository, including all code, tests, and documentation, was created with 
    cd gh-pulls-summary
    ```
 
-2. Install the package and its dependencies:
+2. Create and activate a virtual environment:
    ```bash
+   python -m venv venv
+   
+   # On Linux/macOS:
+   source venv/bin/activate
+   
+   # On Windows:
+   venv\Scripts\activate
+   ```
+
+3. Install the package and its dependencies:
+   ```bash
+   # Option 1: Using make (if available)
    make install
+   
+   # Option 2: Using pip directly
+   pip install -r requirements.txt
+   pip install -e .
    ```
 
    This will:
    - Install the required dependencies listed in `requirements.txt`.
-   - Install the `gh-pulls-summary` command globally for the current user.
+   - Install the `gh-pulls-summary` command in your virtual environment.
 
-3. Verify the installation:
+4. Verify the installation:
    ```bash
    gh-pulls-summary --help
    ```
 
    You should see the help message for the tool.
 
+**Note**: Remember to activate the virtual environment (`source venv/bin/activate` on Linux/macOS or `venv\Scripts\activate` on Windows) each time you want to use the tool in a new terminal session.
+
 ---
 
 ## Usage
 
+**Note**: Make sure your virtual environment is activated before running the tool:
+```bash
+# On Linux/macOS:
+source venv/bin/activate
+
+# On Windows:
+venv\Scripts\activate
 ```
+
+Then run the tool using either:
+```bash
+# Option 1: Using the installed command
+gh-pulls-summary [OPTIONS]
+
+# Option 2: Running the script directly
 python gh_pulls_summary.py [OPTIONS]
 ```
 
@@ -127,8 +159,12 @@ python gh_pulls_summary.py [OPTIONS]
 
 Extract all unique URLs from PR diffs, write the summary to a file, override the column titles, and sort by approvals:
 
-```
-python gh_pulls_summary.py --owner myorg --repo myrepo \
+```bash
+# Ensure virtual environment is activated first
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
+gh-pulls-summary --owner myorg --repo myrepo \
   --url-from-pr-content 'https://example.com/[^\s]+' \
   --output-markdown /tmp/summary.md \
   --column-title date="Ready Date" --column-title approvals="Total Approvals" \
@@ -141,6 +177,10 @@ If you do not specify `--output-markdown`, the Markdown summary (with timestamp)
 You can run the tool against a public repository without authentication. However, note that the GitHub API imposes a rate limit of **60 requests per hour** for unauthenticated requests.
 
 ```bash
+# Activate virtual environment first
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
 gh-pulls-summary --owner jewzaam --repo gh-pulls-summary
 ```
 
@@ -160,13 +200,21 @@ To access private repositories or increase the API rate limit to **5,000 request
    ```
 
 3. **Run the Tool**:
-   Use the same command as for public repositories:
+   Activate your virtual environment and use the same command as for public repositories:
    ```bash
+   # Activate virtual environment first
+   source venv/bin/activate  # Linux/macOS
+   # or: venv\Scripts\activate  # Windows
+   
    gh-pulls-summary --owner <owner> --repo <repo>
    ```
 
 Example:
 ```bash
+# Activate virtual environment and set token
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
 export GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXX
 gh-pulls-summary --owner my-org --repo private-repo
 ```
@@ -191,6 +239,10 @@ export GITHUB_TOKEN=<your_personal_access_token>
 You can then use the token when running the tool:
 
 ```bash
+# Activate virtual environment first
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
 gh-pulls-summary --owner <owner> --repo <repo>
 ```
 
@@ -204,6 +256,9 @@ set GITHUB_TOKEN=<your_personal_access_token>
 Run the tool:
 
 ```cmd
+REM Activate virtual environment first
+venv\Scripts\activate
+
 gh-pulls-summary --owner <owner> --repo <repo>
 ```
 
@@ -217,6 +272,9 @@ $env:GITHUB_TOKEN="<your_personal_access_token>"
 Run the tool:
 
 ```powershell
+# Activate virtual environment first
+venv\Scripts\activate
+
 gh-pulls-summary --owner <owner> --repo <repo>
 ```
 
@@ -253,6 +311,9 @@ secret-tool store --label="GitHub Token" service gh-pulls-summary
 
 ##### Retrieving and Using the Token
 ```bash
+# Activate virtual environment first
+source venv/bin/activate
+
 GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner <owner> --repo <repo>
 ```
 
@@ -273,6 +334,9 @@ security add-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w <your_p
 
 ##### Retrieving and Using the Token
 ```bash
+# Activate virtual environment first
+source venv/bin/activate
+
 GITHUB_TOKEN=$(security find-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w) gh-pulls-summary --owner <owner> --repo <repo>
 ```
 
@@ -301,6 +365,9 @@ On Windows, you can use the SecretManagement module in PowerShell to securely st
 ##### Retrieving and Using the Token
 Retrieve the token and set it as an environment variable:
 ```powershell
+# Activate virtual environment first
+venv\Scripts\activate
+
 $env:GITHUB_TOKEN = Get-Secret -Name GitHubToken
 gh-pulls-summary --owner <owner> --repo <repo>
 ```
@@ -321,6 +388,10 @@ Set-Secret -Name GitHubToken -Secret "<new_personal_access_token>"
 
 Example:
 ```bash
+# Activate virtual environment first
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
 gh-pulls-summary --owner jewzaam --repo gh-pulls-summary --draft-filter no-drafts
 ```
 
@@ -328,6 +399,10 @@ gh-pulls-summary --owner jewzaam --repo gh-pulls-summary --draft-filter no-draft
 
 Example:
 ```bash
+# Activate virtual environment first
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
 gh-pulls-summary --owner jewzaam --repo gh-pulls-summary --debug
 ```
 
