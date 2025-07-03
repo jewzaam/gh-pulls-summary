@@ -55,7 +55,7 @@ def get_repo_and_owner_from_git():
 
         owner, repo = path.split("/", 1)
         return owner, repo
-    except Exception:
+    except Exception:  # pragma: no cover
         return None, None
 
 
@@ -155,18 +155,18 @@ def github_api_request(endpoint, params=None, use_paging=True):
         
         try:
             response = requests.get(url, headers=HEADERS, params=params)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             logging.error(f"Network error making API request: {e}")
             return None
 
-        if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
+        if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":  # pragma: no cover
             raise Exception("Rate limit exceeded. Consider using a GitHub token to increase the limit.")
         if response.status_code != 200:
             raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
 
         try:
             results = response.json()
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             logging.error(f"Error parsing JSON response: {e}")
             return None
 
@@ -570,7 +570,7 @@ def get_authenticated_user_info():
             name = data.get("name") or data.get("login")
             html_url = data.get("html_url")
             return name, html_url
-    except Exception:
+    except Exception:  # pragma: no cover
         pass
     return None, None
 

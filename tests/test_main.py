@@ -2,7 +2,7 @@ import unittest
 import logging
 from unittest.mock import patch, MagicMock
 from gh_pulls_summary import main, generate_timestamp, generate_markdown_output, MissingRepoError
-from gh_pulls_summary import fetch_single_pull_request, fetch_pr_files, fetch_pr_diff
+from gh_pulls_summary import fetch_single_pull_request, fetch_pr_files, fetch_pr_diff, get_authenticated_user_info
 from datetime import datetime, timezone
 
 # Configure logging for tests
@@ -310,6 +310,76 @@ class TestGithubApiHelpers(unittest.TestCase):
         with self.assertRaises(Exception) as ctx:
             fetch_pr_diff("owner", "repo", 99)
         self.assertIn("Failed to fetch PR diff", str(ctx.exception))
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_get_authenticated_user_info_success(self, mock_requests_get):
+        """Test get_authenticated_user_info with successful response."""
+        # Mock the response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "login": "testuser",
+            "name": "Test User",
+            "html_url": "https://github.com/testuser"
+        }
+        mock_requests_get.return_value = mock_response
+        
+        # Call the function
+        name, html_url = get_authenticated_user_info()
+        
+        # Verify the request was made correctly
+        mock_requests_get.assert_called_once_with(
+            "https://api.github.com/user",
+            headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
+            timeout=5
+        )
+        
+        # Verify the json method was called (this covers line 569: data = resp.json())
+        mock_response.json.assert_called_once()
+        
+        # Verify the returned values
+        self.assertEqual(name, "Test User")
+        self.assertEqual(html_url, "https://github.com/testuser")
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_get_authenticated_user_info_success_no_name(self, mock_requests_get):
+        """Test get_authenticated_user_info with successful response but no name field."""
+        # Mock the response with no name field
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "login": "testuser",
+            "html_url": "https://github.com/testuser"
+        }
+        mock_requests_get.return_value = mock_response
+        
+        # Call the function
+        name, html_url = get_authenticated_user_info()
+        
+        # Verify the json method was called (this covers line 569: data = resp.json())
+        mock_response.json.assert_called_once()
+        
+        # Verify the returned values (should fallback to login)
+        self.assertEqual(name, "testuser")
+        self.assertEqual(html_url, "https://github.com/testuser")
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_get_authenticated_user_info_failure(self, mock_requests_get):
+        """Test get_authenticated_user_info with failed response."""
+        # Mock a failed response
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_requests_get.return_value = mock_response
+        
+        # Call the function
+        name, html_url = get_authenticated_user_info()
+        
+        # Verify the json method was NOT called (since status_code != 200)
+        mock_response.json.assert_not_called()
+        
+        # Verify the returned values are None
+        self.assertIsNone(name)
+        self.assertIsNone(html_url)
 
 class TestHelperFunctions(unittest.TestCase):
     """Test cases for the newly refactored helper functions."""
