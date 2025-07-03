@@ -9,6 +9,7 @@ import logging
 import argcomplete
 import subprocess
 import re
+from typing import Dict, Any, cast
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -293,6 +294,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
     url_regex_compiled = re.compile(url_from_pr_content) if url_from_pr_content else None
 
     for pr in prs:
+        pr = cast(Dict[str, Any], pr)  # Type cast to fix linter errors
         logging.info(f"Processing PR #{pr['number']} - {pr['title']}")
 
         # Apply draft filter if specified
@@ -347,6 +349,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         # Fetch author details
         author_details = fetch_user_details(pr_author)
         if author_details is not None:
+            author_details = cast(Dict[str, Any], author_details)  # Type cast to fix linter errors
             pr_author_name = author_details.get("name") or pr_author  # Fallback to username if name is None
             pr_author_url = author_details.get("html_url")
         else:
