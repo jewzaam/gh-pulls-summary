@@ -4,7 +4,7 @@ default: test coverage # Run all tests and generate coverage report
 
 .PHONY: install-requirements
 install-requirements: # Install main requirements
-	pip install --user -r requirements.txt
+	pip install -r requirements.txt
 
 .PHONY: install-requirements-test
 install-requirements-test: # Install test requirements
@@ -30,7 +30,7 @@ coverage: install-requirements-test # Run tests with coverage and generate repor
 
 .PHONY: install
 install: install-requirements # Install this package in editable mode
-	pip install --user -e .
+	pip install -e .
 
 .PHONY: uninstall
 uninstall: # Uninstall this package
