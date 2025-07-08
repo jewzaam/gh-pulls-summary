@@ -29,6 +29,40 @@ This repository, including all code, tests, and documentation, was created with 
 
 ---
 
+## Testing
+
+This project includes both unit tests and integration tests:
+
+### Unit Tests
+- **Fast**: Run without network connections using mocked dependencies
+- **96% code coverage**: Comprehensive test coverage of all core functionality
+- **Default**: Run with `make test`
+
+### Integration Tests
+- **Real API testing**: Test against actual GitHub repositories
+- **Rate limit aware**: Automatically handle GitHub API rate limits
+- **Two-tier approach**: Basic and full test suites
+
+```bash
+# Run basic integration tests (recommended for development)
+make test-integration
+
+# Run full integration tests (requires higher rate limits or GitHub token)
+make test-integration-full
+
+# Run with convenience script
+python run_integration_tests.py
+
+# Run all tests (unit + integration)
+make test-all
+```
+
+**Note**: Integration tests work without authentication but are rate limited to 60 requests/hour. For faster testing, set a `GITHUB_TOKEN` environment variable.
+
+For detailed information, see [`docs/INTEGRATION_TESTS.md`](docs/INTEGRATION_TESTS.md).
+
+---
+
 ## Table of Contents
 
 <!--TOC-->

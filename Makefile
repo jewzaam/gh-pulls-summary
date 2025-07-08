@@ -22,9 +22,30 @@ toc: install-requirements-other # Update the Markdown TOC in README.md
 test: install-requirements-test # Run all unit tests
 	python -m unittest discover -s tests
 
+.PHONY: test-unit
+test-unit: install-requirements-test # Run only unit tests (exclude integration tests)
+	python -m unittest discover -s tests -v
+
+.PHONY: test-integration
+test-integration: install-requirements-test # Run integration tests (requires network)
+	RUN_INTEGRATION_TESTS=1 python -m unittest discover -s integration_tests -p "test_integration_simple.py" -v
+
+.PHONY: test-integration-full
+test-integration-full: install-requirements-test # Run full integration tests (requires network and higher rate limits)
+	RUN_INTEGRATION_TESTS=1 python -m unittest discover -s integration_tests -v
+
+.PHONY: test-all
+test-all: test-unit test-integration # Run both unit and integration tests
+
 .PHONY: coverage
 coverage: install-requirements-test # Run tests with coverage and generate reports
 	coverage run --omit="tests/*" -m unittest discover -s tests
+	coverage report -m
+	coverage xml
+
+.PHONY: coverage-unit
+coverage-unit: install-requirements-test # Run coverage on unit tests only
+	coverage run --omit="tests/*" -m unittest discover -s tests -p "test_*.py" -k "not test_integration"
 	coverage report -m
 	coverage xml
 
