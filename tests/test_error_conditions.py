@@ -1,10 +1,10 @@
 import unittest
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 from gh_pulls_summary import (
     github_api_request, fetch_and_process_pull_requests, 
     get_repo_and_owner_from_git, generate_markdown_output,
-    parse_column_titles, validate_sort_column
+    parse_column_titles, validate_sort_column, fetch_user_details
 )
 
 # Configure logging for tests
@@ -256,6 +256,129 @@ class TestErrorConditions(unittest.TestCase):
         result = get_repo_and_owner_from_git()
         
         self.assertEqual(result, ("owner", "repo"))
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_404_error(self, mock_get):
+        """Test fetch_user_details returns None for 404 error (user not found)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+        mock_get.return_value = mock_response
+        
+        result = fetch_user_details("nonexistent_user")
+        
+        self.assertIsNone(result)
+        mock_get.assert_called_once_with("https://api.github.com/users/nonexistent_user", headers=ANY)
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_404_error_copilot_user(self, mock_get):
+        """Test fetch_user_details returns None for 404 error (Copilot user case)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+        mock_get.return_value = mock_response
+        
+        result = fetch_user_details("Copilot")
+        
+        self.assertIsNone(result)
+        mock_get.assert_called_once_with("https://api.github.com/users/Copilot", headers=ANY)
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_rate_limit_error(self, mock_get):
+        """Test fetch_user_details raises exception for rate limit error."""
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.headers = {"X-RateLimit-Remaining": "0"}
+        mock_response.text = "Rate limit exceeded"
+        mock_get.return_value = mock_response
+        
+        with self.assertRaises(Exception) as ctx:
+            fetch_user_details("testuser")
+        
+        self.assertIn("Rate limit exceeded", str(ctx.exception))
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_other_http_error(self, mock_get):
+        """Test fetch_user_details raises exception for other HTTP errors."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_get.return_value = mock_response
+        
+        with self.assertRaises(Exception) as ctx:
+            fetch_user_details("testuser")
+        
+        self.assertIn("GitHub API request failed: 500", str(ctx.exception))
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_network_error(self, mock_get):
+        """Test fetch_user_details returns None for network errors."""
+        mock_get.side_effect = ConnectionError("Network error")
+        
+        result = fetch_user_details("testuser")
+        
+        self.assertIsNone(result)
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_json_parse_error(self, mock_get):
+        """Test fetch_user_details returns None when JSON parsing fails."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+        mock_get.return_value = mock_response
+        
+        result = fetch_user_details("testuser")
+        
+        self.assertIsNone(result)
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_successful_response(self, mock_get):
+        """Test fetch_user_details returns user data for successful response."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "login": "testuser",
+            "name": "Test User",
+            "html_url": "https://github.com/testuser",
+            "id": 12345
+        }
+        mock_get.return_value = mock_response
+        
+        result = fetch_user_details("testuser")
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result["login"], "testuser")
+        self.assertEqual(result["name"], "Test User")
+        self.assertEqual(result["html_url"], "https://github.com/testuser")
+        self.assertEqual(result["id"], 12345)
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_403_without_rate_limit(self, mock_get):
+        """Test fetch_user_details raises exception for 403 without rate limit headers."""
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.headers = {}  # No rate limit headers
+        mock_response.text = "Forbidden"
+        mock_get.return_value = mock_response
+        
+        with self.assertRaises(Exception) as ctx:
+            fetch_user_details("testuser")
+        
+        self.assertIn("GitHub API request failed: 403", str(ctx.exception))
+
+    @patch("gh_pulls_summary.requests.get")
+    def test_fetch_user_details_empty_username(self, mock_get):
+        """Test fetch_user_details with empty username."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"login": ""}
+        mock_get.return_value = mock_response
+        
+        result = fetch_user_details("")
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result["login"], "")
+        mock_get.assert_called_once_with("https://api.github.com/users/", headers=ANY)
 
 
 if __name__ == "__main__":
