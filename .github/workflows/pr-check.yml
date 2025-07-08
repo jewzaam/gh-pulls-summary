@@ -43,6 +43,7 @@ jobs:
       with:
         name: coverage-data
         path: |
+          .coverage
           coverage.xml
         retention-days: 1
 
