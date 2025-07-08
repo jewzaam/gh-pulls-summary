@@ -1,6 +1,7 @@
 # GitHub Pull Requests Summary Tool
 
 [![PR Check](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml/badge.svg)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/jewzaam/gh-pulls-summary/main/.github/badges/coverage.json)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml)
 
 This tool fetches and summarizes pull requests from a specified GitHub repository. It outputs the data in a Markdown table format, which can be easily copied into documentation or reports.
 
@@ -477,7 +478,7 @@ The tests include comprehensive unit tests with mocking and integration tests ag
 All pull requests must pass the automated PR check which includes:
 - **Unit Tests**: Fast tests with mocked dependencies (96% code coverage)
 - **Simple Integration Tests**: Real API tests against GitHub repositories
-- **Coverage Report**: Automatic coverage reporting
+- **Coverage Report**: Automatic coverage reporting and badge updates
 
 To set up branch protection (repository admin required):
 1. Go to `Settings > Branches` in your GitHub repository
@@ -485,5 +486,13 @@ To set up branch protection (repository admin required):
    - ✅ Require status checks to pass before merging
    - ✅ Require branches to be up to date before merging
    - ✅ Select the "test" status check from the PR Check workflow
+
+### Automatic Coverage Badge
+
+The coverage badge is automatically updated on every push to `main`:
+- The workflow extracts the coverage percentage from test runs
+- Updates `.github/badges/coverage.json` with the current percentage
+- The README badge displays the live coverage via shields.io
+- No external services or tokens required
 
 
