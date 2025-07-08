@@ -233,10 +233,30 @@ def fetch_reviews(owner, repo, pr_number):
 def fetch_user_details(username):
     """
     Fetches details for a specific GitHub user.
+    Returns None if user is not found (404 error).
     """
-    endpoint = f"/users/{username}"
+    url = f"{GITHUB_API_BASE}/users/{username}"
     logging.debug(f"Fetching user details for {username}")
-    return github_api_request(endpoint, use_paging=False)
+    
+    try:
+        response = requests.get(url, headers=HEADERS)
+    except Exception as e:  # pragma: no cover
+        logging.error(f"Network error fetching user details for {username}: {e}")
+        return None
+    
+    if response.status_code == 404:
+        logging.debug(f"User {username} not found (404), returning None")
+        return None
+    elif response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":  # pragma: no cover
+        raise Exception("Rate limit exceeded. Consider using a GitHub token to increase the limit.")
+    elif response.status_code != 200:
+        raise Exception(f"GitHub API request failed: {response.status_code} {response.text}")
+    
+    try:
+        return response.json()
+    except Exception as e:  # pragma: no cover
+        logging.error(f"Error parsing JSON response for user {username}: {e}")
+        return None
 
 
 def fetch_pr_files(owner, repo, pr_number):
