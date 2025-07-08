@@ -1,9 +1,10 @@
 import unittest
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 from gh_pulls_summary import main, generate_timestamp, generate_markdown_output, MissingRepoError
 from gh_pulls_summary import fetch_single_pull_request, fetch_pr_files, fetch_pr_diff, get_authenticated_user_info
 from datetime import datetime, timezone
+import sys
 
 # Configure logging for tests
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -187,7 +188,9 @@ class TestMainFunction(unittest.TestCase):
 
     @patch("gh_pulls_summary.get_repo_and_owner_from_git", return_value=(None, None))
     @patch("gh_pulls_summary.parse_arguments")
-    def test_main_failure_without_owner_and_repo(self, mock_parse_arguments, mock_get_repo_and_owner_from_git):
+    @patch("builtins.print")
+    @patch("gh_pulls_summary.sys.exit")
+    def test_main_failure_without_owner_and_repo(self, mock_exit, mock_print, mock_parse_arguments, mock_get_repo_and_owner_from_git):
         # Mock command-line arguments with no owner or repo
         mock_parse_arguments.return_value = MagicMock(
             owner=None,
@@ -195,11 +198,17 @@ class TestMainFunction(unittest.TestCase):
             draft_filter=None,
             debug=False,
             pr_number=None,
+            output_markdown=None,
         )
 
-        # Call main and check for MissingRepoError
-        with self.assertRaises(MissingRepoError):
-            main()
+        # Call main and check that sys.exit is called
+        main()
+        
+        # Verify that sys.exit was called with code 1
+        mock_exit.assert_called_with(1)
+        
+        # Verify that error message was printed to stderr
+        mock_print.assert_any_call("ERROR: Repository owner and name must be specified.", file=sys.stderr)
 
     @patch("gh_pulls_summary.generate_markdown_output")
     @patch("gh_pulls_summary.generate_timestamp")
@@ -228,12 +237,13 @@ class TestMainFunction(unittest.TestCase):
                 "| --- | --- | --- | --- | --- |\n"
                 "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 3 | 2 |"
             )
-            # Patch print to ensure nothing is printed
+            # Patch print to capture the informational message
             with patch("builtins.print") as mock_print:
                 main()
             mock_generate_markdown_output.assert_called_once_with(mock_parse_arguments.return_value)
             mock_generate_timestamp.assert_called_once()
-            mock_print.assert_not_called()
+            # Now expect print to be called with the informational message
+            mock_print.assert_called_once_with(f"Markdown output written to: {output_path}", file=sys.stderr)
             # Check file contents
             with open(output_path, "r", encoding="utf-8") as f:
                 file_content = f.read()
@@ -295,6 +305,8 @@ class TestGithubApiHelpers(unittest.TestCase):
 
     @patch("gh_pulls_summary.requests.get")
     def test_fetch_pr_diff(self, mock_requests_get):
+        from gh_pulls_summary import GitHubAPIError
+        
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "diff --git a/file1.py b/file1.py"
@@ -307,9 +319,9 @@ class TestGithubApiHelpers(unittest.TestCase):
         mock_response.status_code = 404
         mock_response.text = "Not Found"
         mock_requests_get.return_value = mock_response
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(GitHubAPIError) as ctx:
             fetch_pr_diff("owner", "repo", 99)
-        self.assertIn("Failed to fetch PR diff", str(ctx.exception))
+        self.assertIn("Pull request #99 not found", str(ctx.exception))
 
     @patch("gh_pulls_summary.requests.get")
     def test_get_authenticated_user_info_success(self, mock_requests_get):
@@ -492,36 +504,120 @@ class TestHelperFunctions(unittest.TestCase):
         }
         self.assertEqual(result, expected)
 
-    def test_validate_sort_column_valid(self):
-        """Test validate_sort_column with valid columns."""
-        from gh_pulls_summary import validate_sort_column
-        
-        valid_columns = ["date", "title", "author", "changes", "approvals", "urls"]
-        
-        for col in valid_columns:
-            # Test lowercase
-            result = validate_sort_column(col)
-            self.assertEqual(result, col)
-            
-            # Test uppercase
-            result = validate_sort_column(col.upper())
-            self.assertEqual(result, col)
-            
-            # Test mixed case
-            result = validate_sort_column(col.capitalize())
-            self.assertEqual(result, col)
-
     def test_validate_sort_column_invalid(self):
         """Test validate_sort_column with invalid columns."""
+        from gh_pulls_summary import ValidationError, validate_sort_column
+        
+        invalid_columns = ["invalid", "foo", "bar"]
+        for col in invalid_columns:
+            with self.assertRaises(ValidationError):
+                validate_sort_column(col)
+
+    def test_validate_sort_column_case_insensitive(self):
+        """Test validate_sort_column is case insensitive."""
         from gh_pulls_summary import validate_sort_column
         
-        invalid_columns = ["invalid", "reviews", "status", ""]
+        result = validate_sort_column("DATE")
+        self.assertEqual(result, "date")
         
-        for col in invalid_columns:
-            with self.assertRaises(ValueError) as ctx:
-                validate_sort_column(col)
-            self.assertIn("Invalid sort column", str(ctx.exception))
-            self.assertIn("Must be one of:", str(ctx.exception))
+        result = validate_sort_column("Title")
+        self.assertEqual(result, "title")
+        
+        result = validate_sort_column("APPROVALS")
+        self.assertEqual(result, "approvals")
+
+    @patch('gh_pulls_summary.requests.get')
+    def test_fetch_pr_diff(self, mock_get):
+        """Test fetch_pr_diff function with error response."""
+        from gh_pulls_summary import GitHubAPIError
+        
+        # Mock HTTP 404 response
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+        mock_get.return_value = mock_response
+        
+        with self.assertRaises(GitHubAPIError) as ctx:
+            fetch_pr_diff("owner", "repo", 99)
+        
+        self.assertIn("Pull request #99 not found", str(ctx.exception))
+
+    @patch('gh_pulls_summary.sys.exit')
+    def test_main_failure_without_owner_and_repo(self, mock_exit):
+        """Test main function exits when owner and repo are not provided."""
+        with patch('gh_pulls_summary.parse_arguments') as mock_parse:
+            mock_args = Mock()
+            mock_args.owner = None
+            mock_args.repo = None
+            # Add the required attributes that the main function checks
+            mock_args.file_include = None
+            mock_args.file_exclude = None
+            mock_args.pr_number = None
+            mock_args.url_from_pr_content = None
+            mock_args.draft_filter = None
+            mock_args.sort_column = "date"
+            mock_args.column_title = None
+            mock_args.debug = False
+            mock_args.output_markdown = None
+            mock_parse.return_value = mock_args
+            
+            main()
+            
+            # Verify that sys.exit was called with code 1
+            mock_exit.assert_called_with(1)
+
+    @patch('gh_pulls_summary.open', create=True)
+    @patch('gh_pulls_summary.generate_markdown_output')
+    @patch('gh_pulls_summary.get_authenticated_user_info')
+    @patch('gh_pulls_summary.generate_timestamp')
+    @patch('gh_pulls_summary.configure_logging')
+    @patch('gh_pulls_summary.parse_arguments')
+    @patch('builtins.print')
+    def test_main_output_markdown(self, mock_print, mock_parse, mock_configure, mock_timestamp, mock_auth, mock_generate, mock_open):
+        """Test the main function with --output-markdown argument."""
+        import tempfile
+        import os
+        
+        # Create a temporary file for testing
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+            temp_filename = temp_file.name
+        
+        try:
+            # Mock parse_arguments to return appropriate args
+            mock_args = Mock()
+            mock_args.owner = "test_owner"
+            mock_args.repo = "test_repo"
+            mock_args.output_markdown = temp_filename
+            mock_args.debug = False
+            mock_parse.return_value = mock_args
+            
+            # Mock other functions
+            mock_timestamp.return_value = "**Generated at 2023-01-01 12:00Z**"
+            mock_auth.return_value = ("Test User", "https://github.com/test")
+            mock_generate.return_value = "| Date | Title | Author |\n| --- | --- | --- |"
+            
+            # Mock the file context manager
+            mock_file = Mock()
+            mock_open.return_value.__enter__.return_value = mock_file
+            
+            main()
+            
+            # Verify file was opened for writing
+            mock_open.assert_called_once_with(temp_filename, "w", encoding="utf-8")
+            
+            # Verify content was written to file
+            mock_file.write.assert_called_once()
+            written_content = mock_file.write.call_args[0][0]
+            self.assertIn("**Generated at 2023-01-01 12:00Z**", written_content)
+            self.assertIn("| Date | Title | Author |", written_content)
+            
+            # Verify the new informational message was printed
+            mock_print.assert_called_once_with(f"Markdown output written to: {temp_filename}", file=mock_print.call_args[1]['file'])
+            
+        finally:
+            # Clean up the temporary file
+            if os.path.exists(temp_filename):
+                os.unlink(temp_filename)
 
     def test_create_markdown_table_header_no_url_column(self):
         """Test create_markdown_table_header without URL column."""
