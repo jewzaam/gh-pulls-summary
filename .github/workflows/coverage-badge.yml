@@ -35,21 +35,40 @@ jobs:
         echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
         echo "Coverage: $COVERAGE%"
     
-    - name: Create coverage badge
-      run: |
-        mkdir -p .github/badges
-        echo '{"schemaVersion": 1, "label": "coverage", "message": "'$COVERAGE'%", "color": "brightgreen"}' > .github/badges/coverage.json
+
     
-    - name: Commit coverage badge
+    - name: Update coverage badge via API
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add .github/badges/coverage.json
-        if ! git diff --staged --quiet; then
-          git commit -m "Update coverage badge [skip ci]"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git HEAD:main
+        # Create badge content
+        BADGE_CONTENT='{"schemaVersion": 1, "label": "coverage", "message": "'$COVERAGE'%", "color": "brightgreen"}'
+        
+        # Get current file SHA if it exists
+        SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          "https://api.github.com/repos/${{ github.repository }}/contents/.github/badges/coverage.json" \
+          | python -c "import sys, json; data = json.load(sys.stdin); print(data.get('sha', ''))" 2>/dev/null || echo "")
+        
+        # Create or update file via GitHub API
+        if [ -n "$SHA" ]; then
+          # File exists, update it
+          curl -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"message\": \"Update coverage badge [skip ci]\",
+              \"content\": \"$(echo -n "$BADGE_CONTENT" | base64 -w 0)\",
+              \"sha\": \"$SHA\"
+            }" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/.github/badges/coverage.json"
         else
-          echo "No changes to coverage badge"
+          # File doesn't exist, create it
+          curl -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"message\": \"Create coverage badge [skip ci]\",
+              \"content\": \"$(echo -n "$BADGE_CONTENT" | base64 -w 0)\"
+            }" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/.github/badges/coverage.json"
         fi 
