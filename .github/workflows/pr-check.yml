@@ -28,7 +28,4 @@ jobs:
       run: make test-unit
     
     - name: Run simple integration tests
-      run: make test-integration-simple
-    
-    - name: Generate coverage report
-      run: make coverage 
+      run: make test-integration-simple 
