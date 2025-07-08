@@ -131,6 +131,7 @@ class TestGitHubApiIntegration(IntegrationTestBase):
         
         self.assertIsNotNone(pr)
         self.assertIsInstance(pr, dict)
+        pr = cast(Dict[str, Any], pr)
         self.assertEqual(pr["number"], pr_number)
         self.assertIn("title", pr)
         self.assertIn("user", pr)
