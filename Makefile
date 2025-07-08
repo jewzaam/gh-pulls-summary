@@ -26,6 +26,10 @@ test: install-requirements-test # Run all unit tests
 test-unit: install-requirements-test # Run only unit tests (exclude integration tests)
 	python -m unittest discover -s tests -v
 
+.PHONY: test-integration-simple
+test-integration-simple: install-requirements-test # Run simple integration tests (requires network)
+	RUN_INTEGRATION_TESTS=1 python -m unittest discover -s integration_tests -p "test_integration_simple.py" -v
+
 .PHONY: test-integration
 test-integration: install-requirements-test # Run integration tests (requires network)
 	RUN_INTEGRATION_TESTS=1 python -m unittest discover -s integration_tests -p "test_integration_simple.py" -v
@@ -35,7 +39,7 @@ test-integration-full: install-requirements-test # Run full integration tests (r
 	RUN_INTEGRATION_TESTS=1 python -m unittest discover -s integration_tests -v
 
 .PHONY: test-all
-test-all: test-unit test-integration # Run both unit and integration tests
+test-all: test-unit test-integration-simple # Run both unit and simple integration tests
 
 .PHONY: coverage
 coverage: install-requirements-test # Run tests with coverage and generate reports
