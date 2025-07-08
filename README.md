@@ -1,5 +1,7 @@
 # GitHub Pull Requests Summary Tool
 
+[![PR Check](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml/badge.svg)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml)
+
 This tool fetches and summarizes pull requests from a specified GitHub repository. It outputs the data in a Markdown table format, which can be easily copied into documentation or reports.
 
 ---
@@ -457,4 +459,30 @@ Example Output:
 | 2025-05-01 | Add feature X #[123](https://github.com/...) | [John Doe](https://github.com/johndoe) | 1            | 2 of 3    |
 | 2025-05-02 | Fix bug Y #[124](https://github.com/...) | [Jane Smith](https://github.com/janesmith) | 0            | 1 of 1    |
 ````
+
+---
+
+## Contributing
+
+For local development, you can run the tests using:
+
+```bash
+make test
+```
+
+The tests include comprehensive unit tests with mocking and integration tests against real GitHub repositories.
+
+### Pull Request Process
+
+All pull requests must pass the automated PR check which includes:
+- **Unit Tests**: Fast tests with mocked dependencies (96% code coverage)
+- **Simple Integration Tests**: Real API tests against GitHub repositories
+- **Coverage Report**: Automatic coverage reporting
+
+To set up branch protection (repository admin required):
+1. Go to `Settings > Branches` in your GitHub repository
+2. Add rule for `main` branch with these requirements:
+   - ✅ Require status checks to pass before merging
+   - ✅ Require branches to be up to date before merging
+   - ✅ Select the "test" status check from the PR Check workflow
 
