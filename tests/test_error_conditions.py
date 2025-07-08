@@ -194,6 +194,69 @@ class TestErrorConditions(unittest.TestCase):
         
         self.assertEqual(result, ("owner", "repo"))
 
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_https_url_with_git_suffix(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with HTTPS URL with .git suffix."""
+        mock_subprocess.return_value = "https://github.com/owner/repo.git"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, ("owner", "repo"))
+
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_http_url_no_git_suffix(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with HTTP URL without .git suffix."""
+        mock_subprocess.return_value = "http://github.com/owner/repo"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, (None, None))
+
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_http_url_with_git_suffix(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with HTTP URL with .git suffix."""
+        mock_subprocess.return_value = "http://github.com/owner/repo.git"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, (None, None))
+
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_ssh_url_with_git_suffix(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with SSH URL with .git suffix."""
+        mock_subprocess.return_value = "git@github.com:owner/repo.git"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, ("owner", "repo"))
+
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_https_url_with_subpaths(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with HTTPS URL with additional subpaths."""
+        mock_subprocess.return_value = "https://github.com/owner/repo/some/extra/path"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, ("owner", "repo"))
+
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_https_url_different_host(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with HTTPS URL from different host."""
+        mock_subprocess.return_value = "https://gitlab.com/owner/repo.git"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, ("owner", "repo"))
+
+    @patch("gh_pulls_summary.subprocess.check_output")
+    def test_get_repo_and_owner_from_git_https_url_with_port(self, mock_subprocess):
+        """Test get_repo_and_owner_from_git with HTTPS URL with port number."""
+        mock_subprocess.return_value = "https://github.com:443/owner/repo.git"
+        
+        result = get_repo_and_owner_from_git()
+        
+        self.assertEqual(result, ("owner", "repo"))
+
 
 if __name__ == "__main__":
     unittest.main() 
