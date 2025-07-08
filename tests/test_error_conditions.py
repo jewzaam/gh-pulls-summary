@@ -237,7 +237,7 @@ class TestErrorConditions(unittest.TestCase):
         
         result = get_repo_and_owner_from_git()
         
-        self.assertEqual(result, ("owner", "repo/some/extra/path"))
+        self.assertEqual(result, ("owner", "repo"))
 
     @patch("gh_pulls_summary.subprocess.check_output")
     def test_get_repo_and_owner_from_git_https_url_different_host(self, mock_subprocess):

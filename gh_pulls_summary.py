@@ -45,7 +45,11 @@ def get_repo_and_owner_from_git():
             _, path = remote_url.split(":", 1)
         elif remote_url.startswith("https://"):
             # HTTPS URL (e.g., https://github.com/owner/repo.git)
-            path = remote_url.split("/", 3)[-1]
+            parts = remote_url.split("/", 5)  # Split into up to 6 parts: ["https:", "", "domain", "owner", "repo", "extra/path..."]
+            if len(parts) >= 5:
+                path = f"{parts[3]}/{parts[4]}"  # owner/repo
+            else:
+                path = remote_url.split("/", 3)[-1]
         else:
             return None, None
 
