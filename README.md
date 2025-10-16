@@ -75,6 +75,7 @@ For detailed information, see [`docs/INTEGRATION_TESTS.md`](docs/INTEGRATION_TES
   - [Features](#features)
   - [Requirements](#requirements)
   - [Table of Contents](#table-of-contents)
+  - [Quick Start (No Installation)](#quick-start-no-installation)
   - [Installation](#installation)
     - [Prerequisites](#prerequisites)
     - [Steps](#steps)
@@ -108,6 +109,30 @@ For detailed information, see [`docs/INTEGRATION_TESTS.md`](docs/INTEGRATION_TES
   - [Output](#output)
 
 <!--TOC-->
+
+## Quick Start (No Installation)
+
+If you want to try the tool without installing it, you can use `uvx` to run it directly from GitHub:
+
+```bash
+# Get help
+uvx --from git+https://github.com/jewzaam/gh-pulls-summary gh-pulls-summary --help
+
+# Run against a public repository
+uvx --from git+https://github.com/jewzaam/gh-pulls-summary gh-pulls-summary --owner jewzaam --repo gh-pulls-summary
+
+# Run with authentication for private repos or higher rate limits
+GITHUB_TOKEN=<your_token> uvx --from git+https://github.com/jewzaam/gh-pulls-summary gh-pulls-summary --owner myorg --repo myrepo
+```
+
+This method:
+- Requires no installation or virtual environment setup
+- Always uses the latest version from the repository
+- Works on any system with `uvx` installed (part of the `uv` Python packaging tool)
+
+**Note**: If you don't have `uvx` installed, see [uv installation instructions](https://github.com/astral-sh/uv#installation).
+
+---
 
 ## Installation
 
