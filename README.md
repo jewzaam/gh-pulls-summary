@@ -1,118 +1,41 @@
 # GitHub Pull Requests Summary Tool
 
-[![PR Check](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml/badge.svg)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/jewzaam/gh-pulls-summary/main/.github/badges/coverage.json)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/pr-check.yml)
+[![Test](https://github.com/jewzaam/gh-pulls-summary/workflows/Test/badge.svg)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/test.yml)
+[![Lint](https://github.com/jewzaam/gh-pulls-summary/workflows/Lint/badge.svg)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/lint.yml)
+[![Coverage Check](https://github.com/jewzaam/gh-pulls-summary/workflows/Coverage%20Check/badge.svg)](https://github.com/jewzaam/gh-pulls-summary/actions/workflows/coverage.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-This tool fetches and summarizes pull requests from a specified GitHub repository. It outputs the data in a Markdown table format, which can be easily copied into documentation or reports.
+A tool to fetch and summarize GitHub pull requests from a specified repository. Outputs data in Markdown table format for easy integration into documentation and reports.
 
 ---
 
 ## About This Project's Creation
 
-This repository, including all code, tests, and documentation, was created with the assistance of GitHub Copilot and Cursor. All implementation, design, and documentation tasks involved AI-powered code generation and suggestions from these tools, but every change is carefully reviewed and manual updates are made where necessary. Suggestions are never taken as-is; all code and documentation are edited and refined to ensure correctness and quality.
+This repository, including all code, tests, and documentation, was created with the assistance of GitHub Copilot and Cursor. All implementation, design, and documentation tasks involved AI-powered code generation and suggestions from these tools, but every change is carefully reviewed and manual updates are made where necessary.
 
 ---
 
 ## Features
-- Fetch pull requests from public or private repositories.
-- Filter pull requests based on draft status (`only-drafts`, `no-drafts`, or no filter).
-- Outputs pull request details, including:
-  - Date the pull request was marked ready for review.
-  - Title and number of the pull request.
-  - Author details.
-  - Number of reviews and approvals.
-- `--file-include` / `--file-exclude`: Regex patterns to filter PRs by changed file paths.
-- `--url-from-pr-content`: Regex pattern to extract URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs.
+
+- **PR Fetching**: Fetch pull requests from public or private repositories
+- **Draft Filtering**: Filter by draft status (`only-drafts`, `no-drafts`, or no filter)
+- **File Filtering**: Regex patterns to include/exclude PRs by changed file paths
+- **URL Extraction**: Extract URLs from PR diffs using regex patterns
+- **Flexible Output**: Markdown table format with customizable column titles and sorting
+- **Comprehensive Details**:
+  - Date the PR was marked ready for review
+  - Title and number with links
+  - Author details with links
+  - Review counts and approvals
 
 ---
 
-## Requirements
-- Python 3.6 or later.
-- See `requirements.txt`.
+## 🚀 Quick Start
 
----
+### Using uvx (No Installation Required)
 
-## Testing
-
-This project includes both unit tests and integration tests:
-
-### Unit Tests
-- **Fast**: Run without network connections using mocked dependencies
-- **96% code coverage**: Comprehensive test coverage of all core functionality
-- **Default**: Run with `make test`
-
-### Integration Tests
-- **Real API testing**: Test against actual GitHub repositories
-- **Rate limit aware**: Automatically handle GitHub API rate limits
-- **Two-tier approach**: Basic and full test suites
-
-```bash
-# Run basic integration tests (recommended for development)
-make test-integration
-
-# Run full integration tests (requires higher rate limits or GitHub token)
-make test-integration-full
-
-# Run with convenience script
-python run_integration_tests.py
-
-# Run all tests (unit + integration)
-make test-all
-```
-
-**Note**: Integration tests work without authentication but are rate limited to 60 requests/hour. For faster testing, set a `GITHUB_TOKEN` environment variable.
-
-For detailed information, see [`docs/INTEGRATION_TESTS.md`](docs/INTEGRATION_TESTS.md).
-
----
-
-## Table of Contents
-
-<!--TOC-->
-
-- [GitHub Pull Requests Summary Tool](#github-pull-requests-summary-tool)
-  - [About This Project's Creation](#about-this-projects-creation)
-  - [Features](#features)
-  - [Requirements](#requirements)
-  - [Table of Contents](#table-of-contents)
-  - [Quick Start (No Installation)](#quick-start-no-installation)
-  - [Installation](#installation)
-    - [Prerequisites](#prerequisites)
-    - [Steps](#steps)
-  - [Usage](#usage)
-    - [Options](#options)
-    - [Example](#example)
-    - [Running Against a Public Repository (No Authentication)](#running-against-a-public-repository-no-authentication)
-    - [Running Against a Private Repository (Requires Authentication)](#running-against-a-private-repository-requires-authentication)
-  - [Managing GitHub Token Securely](#managing-github-token-securely)
-    - [1. Use Environment Variables](#1-use-environment-variables)
-      - [Linux/macOS](#linuxmacos)
-      - [Windows (Command Prompt)](#windows-command-prompt)
-      - [Windows (PowerShell)](#windows-powershell)
-    - [2. Using `.env` Files](#2-using-env-files)
-      - [Linux/macOS](#linuxmacos-1)
-      - [Windows (PowerShell)](#windows-powershell-1)
-    - [3. Use System Keyring](#3-use-system-keyring)
-      - [Linux](#linux)
-        - [Storing the Token](#storing-the-token)
-        - [Retrieving and Using the Token](#retrieving-and-using-the-token)
-        - [Updating the Token](#updating-the-token)
-      - [macOS](#macos)
-        - [Storing the Token](#storing-the-token-1)
-        - [Retrieving and Using the Token](#retrieving-and-using-the-token-1)
-        - [Updating the Token](#updating-the-token-1)
-      - [Windows](#windows)
-        - [Storing the Token](#storing-the-token-2)
-        - [Retrieving and Using the Token](#retrieving-and-using-the-token-2)
-        - [Updating the Token](#updating-the-token-2)
-  - [Optional Arguments](#optional-arguments)
-  - [Output](#output)
-
-<!--TOC-->
-
-## Quick Start (No Installation)
-
-If you want to try the tool without installing it, you can use `uvx` to run it directly from GitHub:
+The fastest way to try the tool:
 
 ```bash
 # Get help
@@ -125,399 +48,376 @@ uvx --from git+https://github.com/jewzaam/gh-pulls-summary gh-pulls-summary --ow
 GITHUB_TOKEN=<your_token> uvx --from git+https://github.com/jewzaam/gh-pulls-summary gh-pulls-summary --owner myorg --repo myrepo
 ```
 
-This method:
-- Requires no installation or virtual environment setup
-- Always uses the latest version from the repository
-- Works on any system with `uvx` installed (part of the `uv` Python packaging tool)
+**Note**: Requires `uvx` (part of the `uv` Python packaging tool). See [uv installation instructions](https://github.com/astral-sh/uv#installation).
 
-**Note**: If you don't have `uvx` installed, see [uv installation instructions](https://github.com/astral-sh/uv#installation).
+### Local Installation
 
----
-
-## Installation
-
-### Prerequisites
-- Python 3.6 or later is required.
-- Ensure you have `make` installed on your system (optional, for automated setup).
-
-### Steps
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/gh-pulls-summary.git
-   cd gh-pulls-summary
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   
-   # On Linux/macOS:
-   source venv/bin/activate
-   
-   # On Windows:
-   venv\Scripts\activate
-   ```
-
-3. Install the package and its dependencies:
-   ```bash
-   # Option 1: Using make (if available)
-   make install
-   
-   # Option 2: Using pip directly
-   pip install -r requirements.txt
-   pip install -e .
-   ```
-
-   This will:
-   - Install the required dependencies listed in `requirements.txt`.
-   - Install the `gh-pulls-summary` command in your virtual environment.
-
-4. Verify the installation:
-   ```bash
-   gh-pulls-summary --help
-   ```
-
-   You should see the help message for the tool.
-
-**Note**: Remember to activate the virtual environment (`source venv/bin/activate` on Linux/macOS or `venv\Scripts\activate` on Windows) each time you want to use the tool in a new terminal session.
-
----
-
-## Usage
-
-**Note**: Make sure your virtual environment is activated before running the tool:
 ```bash
-# On Linux/macOS:
-source venv/bin/activate
+# Clone the repository
+git clone https://github.com/jewzaam/gh-pulls-summary.git
+cd gh-pulls-summary
 
-# On Windows:
-venv\Scripts\activate
+# Set up development environment (creates venv, installs dependencies)
+make requirements-dev
+
+# Install the package in editable mode
+make install-package
+
+# Verify installation
+.venv/bin/gh-pulls-summary --help
 ```
 
-Then run the tool using either:
-```bash
-# Option 1: Using the installed command
-gh-pulls-summary [OPTIONS]
+---
 
-# Option 2: Running the script directly
-python gh_pulls_summary.py [OPTIONS]
+## 📋 Requirements
+
+- Python 3.10 or later
+- Dependencies managed via `requirements.txt` and `requirements-dev.txt`
+
+---
+
+## 📁 Project Structure
+
+```
+gh-pulls-summary/
+├── src/
+│   └── gh_pulls_summary/        # Main package
+│       ├── __init__.py           # Package metadata
+│       └── main.py               # Application entry point
+├── tests/
+│   ├── unit/                     # Unit tests (96% coverage)
+│   └── integration/              # Integration tests
+├── make/                         # Modular Makefile components
+│   ├── common.mk                 # Shared variables and constants
+│   ├── env.mk                    # Environment setup
+│   ├── lint.mk                   # Linting and formatting
+│   └── test.mk                   # Testing targets
+├── .github/
+│   └── workflows/                # GitHub Actions CI/CD
+│       ├── test.yml              # Test workflow
+│       ├── lint.yml              # Lint workflow
+│       └── coverage.yml          # Coverage check workflow
+├── docs/                         # Documentation
+├── Makefile                      # Main build file
+├── pyproject.toml               # Python project configuration
+├── requirements.txt             # Runtime dependencies
+└── requirements-dev.txt         # Development dependencies
+```
+
+---
+
+## 🛠️ Development
+
+### Make Targets
+
+Run `make help` to see all available targets. Key commands:
+
+#### Environment Setup
+```bash
+make venv              # Create virtual environment
+make requirements      # Install runtime dependencies
+make requirements-dev  # Install all dependencies (runtime + dev)
+make install-package   # Install package in editable mode
+make clean             # Remove temporary files and artifacts
+```
+
+#### Testing
+```bash
+make test              # Run all tests (unit + integration)
+make test-unit         # Run unit tests only
+make test-integration  # Run integration tests only
+make coverage          # Run tests with coverage report and threshold check
+make coverage-report   # Generate coverage report without threshold
+```
+
+#### Code Quality
+```bash
+make lint              # Run linting (ruff + mypy)
+make format            # Format code with ruff
+```
+
+### Continuous Integration
+
+The project uses GitHub Actions for CI/CD:
+
+- **Test Workflow**: Runs tests on Python 3.10, 3.11, and 3.12
+- **Lint Workflow**: Checks code quality with ruff and mypy
+- **Coverage Workflow**: Enforces 90% coverage threshold
+
+All workflows run on PRs and pushes to `main`.
+
+---
+
+## 📖 Usage
+
+### Basic Usage
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run against a repository
+gh-pulls-summary --owner microsoft --repo vscode
 ```
 
 ### Options
 
-- `--owner`: The owner of the repository (e.g., 'microsoft'). If not specified, defaults to the owner from the current directory's Git config.
-- `--repo`: The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.
-- `--pr-number`: Specify a single pull request number to query.
-- `--draft-filter`: Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts.
-- `--file-include`: Regex pattern to include pull requests based on changed file paths. Can be specified multiple times.
-- `--file-exclude`: Regex pattern to exclude pull requests based on changed file paths. Can be specified multiple times.
-- `--url-from-pr-content`: Regex pattern to extract all unique URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs.
-- `--output-markdown`: Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only.
-- `--debug`: Enable debug logging and show tracebacks on error.
-- `--column-title`: Override the title for any output column. Format: `COLUMN=TITLE`. Valid COLUMN values: `date`, `title`, `author`, `changes`, `approvals`, `urls`. Can be specified multiple times.
-- `--sort-column`: Specify which output column to sort by. Valid values: `date`, `title`, `author`, `changes`, `approvals`, `urls`. Default is `date`.
+- `--owner`: Repository owner (defaults to current git config)
+- `--repo`: Repository name (defaults to current git config)
+- `--pr-number`: Query a single PR by number
+- `--draft-filter`: Filter by draft status (`only-drafts` or `no-drafts`)
+- `--file-include`: Regex pattern to include PRs by changed files (repeatable)
+- `--file-exclude`: Regex pattern to exclude PRs by changed files (repeatable)
+- `--url-from-pr-content`: Regex to extract URLs from PR diffs
+- `--output-markdown`: Write output to file
+- `--column-title`: Override column titles (format: `COLUMN=TITLE`)
+- `--sort-column`: Sort by column (`date`, `title`, `author`, `changes`, `approvals`, `urls`)
+- `--debug`: Enable debug logging
 
-### Example
-
-Extract all unique URLs from PR diffs, write the summary to a file, override the column titles, and sort by approvals:
+### Examples
 
 ```bash
-# Ensure virtual environment is activated first
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
+# Filter to non-draft PRs only
+gh-pulls-summary --owner myorg --repo myrepo --draft-filter no-drafts
 
+# Extract URLs and save to file
 gh-pulls-summary --owner myorg --repo myrepo \
   --url-from-pr-content 'https://example.com/[^\s]+' \
-  --output-markdown /tmp/summary.md \
-  --column-title date="Ready Date" --column-title approvals="Total Approvals" \
+  --output-markdown /tmp/summary.md
+
+# Custom column titles and sorting
+gh-pulls-summary --owner myorg --repo myrepo \
+  --column-title date="Ready Date" \
+  --column-title approvals="Approval Count" \
   --sort-column approvals
+
+# Filter by changed files
+gh-pulls-summary --owner myorg --repo myrepo \
+  --file-include '.*\.py$' \
+  --file-exclude 'test_.*\.py$'
 ```
 
-If you do not specify `--output-markdown`, the Markdown summary (with timestamp) will be printed to the terminal.
+---
 
-### Running Against a Public Repository (No Authentication)
-You can run the tool against a public repository without authentication. However, note that the GitHub API imposes a rate limit of **60 requests per hour** for unauthenticated requests.
+## 🔐 Authentication
 
-```bash
-# Activate virtual environment first
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
+### Public Repositories
 
-gh-pulls-summary --owner jewzaam --repo gh-pulls-summary
-```
+Works without authentication but is rate-limited to **60 requests/hour**.
 
-### Running Against a Private Repository (Requires Authentication)
-To access private repositories or increase the API rate limit to **5,000 requests per hour**, you need to authenticate using a GitHub personal access token.
+### Private Repositories
 
-1. **Set Up a classic GitHub Token**:
-   - [Tokens (classic)](https://github.com/settings/tokens)
-   - Select "Generate new token" then "Generate new token (classic)"
-   - Check the scope `repo`
-   - For more info see [GitHub documentation on creating a personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token).   
+Requires a GitHub Personal Access Token:
 
-2. **Set the Token as an Environment Variable**:
-   Export the token as an environment variable:
+1. **Create a classic GitHub Token**:
+   - Visit [Tokens (classic)](https://github.com/settings/tokens)
+   - Select "Generate new token (classic)"
+   - Check the `repo` scope
+   - See [GitHub documentation](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
+
+2. **Set the Token**:
    ```bash
    export GITHUB_TOKEN=<your_personal_access_token>
    ```
 
 3. **Run the Tool**:
-   Activate your virtual environment and use the same command as for public repositories:
    ```bash
-   # Activate virtual environment first
-   source venv/bin/activate  # Linux/macOS
-   # or: venv\Scripts\activate  # Windows
-   
-   gh-pulls-summary --owner <owner> --repo <repo>
+   gh-pulls-summary --owner myorg --repo private-repo
    ```
 
-Example:
+With authentication, you get **5,000 requests/hour**.
+
+### Secure Token Management
+
+#### Environment Variables
 ```bash
-# Activate virtual environment and set token
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
+# Linux/macOS
+export GITHUB_TOKEN=<your_token>
 
-export GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-gh-pulls-summary --owner my-org --repo private-repo
+# Windows (PowerShell)
+$env:GITHUB_TOKEN="<your_token>"
 ```
 
-**NOTE**: The _classic_ scope of `repo` is required for this to work. Any other permissions have yet to work correctly. PRs are welcome to fix this in the documentation if there's another way.
-
----
-
-## Managing GitHub Token Securely
-
-Security is critical when managing your GitHub token. Tokens grant access to your repositories and should be handled with care to prevent unauthorized access. Below are instructions tailored for different operating systems to securely manage your token.
-
-### 1. Use Environment Variables
-
-#### Linux/macOS
-Store the token in an environment variable to avoid hardcoding it in scripts or files. For example:
-
-```bash
-export GITHUB_TOKEN=<your_personal_access_token>
-```
-
-You can then use the token when running the tool:
-
-```bash
-# Activate virtual environment first
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
-
-gh-pulls-summary --owner <owner> --repo <repo>
-```
-
-#### Windows (Command Prompt)
-Use the `set` command to set the environment variable:
-
-```cmd
-set GITHUB_TOKEN=<your_personal_access_token>
-```
-
-Run the tool:
-
-```cmd
-REM Activate virtual environment first
-venv\Scripts\activate
-
-gh-pulls-summary --owner <owner> --repo <repo>
-```
-
-#### Windows (PowerShell)
-Use the `$env:` syntax to set the environment variable:
-
-```powershell
-$env:GITHUB_TOKEN="<your_personal_access_token>"
-```
-
-Run the tool:
-
-```powershell
-# Activate virtual environment first
-venv\Scripts\activate
-
-gh-pulls-summary --owner <owner> --repo <repo>
-```
-
-### 2. Using `.env` Files
-You can use a `.env` file to manage environment variables locally. Create a `.env` file:
-
+#### .env Files
+Create a `.env` file (already in `.gitignore`):
 ```env
 GITHUB_TOKEN=<your_personal_access_token>
 ```
 
-Load the `.env` file in your shell before running the tool:
-
-#### Linux/macOS
+Load it:
 ```bash
+# Linux/macOS
 source .env
-```
 
-#### Windows (PowerShell)
-```powershell
+# Windows (PowerShell)
 Get-Content .env | ForEach-Object { $name, $value = $_ -split '='; $env:$name = $value }
 ```
 
-**Note**: The `.env` file is excluded in the repository's `.gitignore` file.
+#### System Keyring
 
-### 3. Use System Keyring
-
-#### Linux
-On Linux, you can use `secret-tool` to securely store and retrieve the token:
-
-##### Storing the Token
+**Linux** (using `secret-tool`):
 ```bash
+# Store
 secret-tool store --label="GitHub Token" service gh-pulls-summary
+
+# Use
+GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner myorg --repo myrepo
 ```
 
-##### Retrieving and Using the Token
+**macOS** (using Keychain):
 ```bash
-# Activate virtual environment first
-source venv/bin/activate
+# Store
+security add-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w <your_token>
 
-GITHUB_TOKEN=$(secret-tool lookup service gh-pulls-summary) gh-pulls-summary --owner <owner> --repo <repo>
+# Use
+GITHUB_TOKEN=$(security find-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w) gh-pulls-summary --owner myorg --repo myrepo
 ```
 
-##### Updating the Token
-If you need to update the token, re-run the `secret-tool store` command:
-
-```bash
-secret-tool store --label="GitHub Token" service gh-pulls-summary
-```
-
-#### macOS
-On macOS, you can use the Keychain to securely store and retrieve the token:
-
-##### Storing the Token
-```bash
-security add-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w <your_personal_access_token>
-```
-
-##### Retrieving and Using the Token
-```bash
-# Activate virtual environment first
-source venv/bin/activate
-
-GITHUB_TOKEN=$(security find-generic-password -a "gh-pulls-summary" -s "GitHub Token" -w) gh-pulls-summary --owner <owner> --repo <repo>
-```
-
-##### Updating the Token
-If you need to update the token, re-run the `security add-generic-password` command.
-
-#### Windows
-On Windows, you can use the SecretManagement module in PowerShell to securely store and retrieve the token:
-
-##### Storing the Token
-1. Install the SecretManagement module:
-   ```powershell
-   Install-Module -Name Microsoft.PowerShell.SecretManagement -Force
-   ```
-
-2. Register a vault (e.g., SecretStore):
-   ```powershell
-   Register-SecretVault -Name MySecretVault -ModuleName Microsoft.PowerShell.SecretStore -DefaultVault
-   ```
-
-3. Store the token:
-   ```powershell
-   Set-Secret -Name GitHubToken -Secret "<your_personal_access_token>"
-   ```
-
-##### Retrieving and Using the Token
-Retrieve the token and set it as an environment variable:
+**Windows** (using SecretManagement):
 ```powershell
-# Activate virtual environment first
-venv\Scripts\activate
+# Install and setup
+Install-Module -Name Microsoft.PowerShell.SecretManagement -Force
+Register-SecretVault -Name MySecretVault -ModuleName Microsoft.PowerShell.SecretStore -DefaultVault
 
+# Store
+Set-Secret -Name GitHubToken -Secret "<your_token>"
+
+# Use
 $env:GITHUB_TOKEN = Get-Secret -Name GitHubToken
-gh-pulls-summary --owner <owner> --repo <repo>
-```
-
-##### Updating the Token
-To update the token, re-run the `Set-Secret` command:
-```powershell
-Set-Secret -Name GitHubToken -Secret "<new_personal_access_token>"
+gh-pulls-summary --owner myorg --repo myrepo
 ```
 
 ---
 
-## Optional Arguments
-- `--draft-filter`: Filter pull requests based on draft status.
-  - `only-drafts`: Include only draft pull requests.
-  - `no-drafts`: Exclude draft pull requests.
-  - If not specified, all pull requests are included regardless of draft status.
+## 🧪 Testing
 
-Example:
-```bash
-# Activate virtual environment first
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
+This project includes comprehensive testing:
 
-gh-pulls-summary --owner jewzaam --repo gh-pulls-summary --draft-filter no-drafts
-```
+### Unit Tests
+- **Fast**: No network connections, mocked dependencies
+- **96% code coverage**: Comprehensive coverage of all core functionality
+- **Default**: Run with `make test-unit`
 
-- `--debug`: Enable debug logging to output detailed information about the script's execution.
-
-Example:
-```bash
-# Activate virtual environment first
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
-
-gh-pulls-summary --owner jewzaam --repo gh-pulls-summary --debug
-```
-
----
-
-## Output
-The tool outputs a Markdown table with the following columns:
-- **Date**: The date the pull request was marked ready for review.
-- **Title**: The title of the pull request, with a link to the pull request.
-- **Author**: The name of the author, with a link to their GitHub profile.
-- **Change Requested**: The number of reviews requesting changes.
-- **Approvals**: The number of approvals out of total reviews (e.g., "2 of 5").
-
-Example Output:
-````markdown
-| Date 🔽    | Title                                   | Author          | Change Requested | Approvals |
-| ---------- | --------------------------------------- | --------------- | ---------------- | --------- |
-| 2025-05-01 | Add feature X #[123](https://github.com/...) | [John Doe](https://github.com/johndoe) | 1            | 2 of 3    |
-| 2025-05-02 | Fix bug Y #[124](https://github.com/...) | [Jane Smith](https://github.com/janesmith) | 0            | 1 of 1    |
-````
-
----
-
-## Contributing
-
-For local development, you can run the tests using:
+### Integration Tests
+- **Real API testing**: Tests against actual GitHub repositories
+- **Rate limit aware**: Handles GitHub API rate limits automatically
+- **Two-tier approach**: Basic and full test suites
 
 ```bash
+# Run all tests
 make test
+
+# Run only unit tests
+make test-unit
+
+# Run only integration tests
+make test-integration
+
+# Run with coverage
+make coverage
+
+# Generate coverage report only (no threshold check)
+make coverage-report
 ```
 
-The tests include comprehensive unit tests with mocking and integration tests against real GitHub repositories.
+**Note**: Integration tests work without authentication but are rate-limited to 60 requests/hour. For faster testing, set a `GITHUB_TOKEN` environment variable.
+
+For detailed information, see [`docs/INTEGRATION_TESTS.md`](docs/INTEGRATION_TESTS.md).
+
+---
+
+## 📏 Code Quality
+
+The project uses modern Python tooling:
+
+- **ruff**: Fast linter and formatter (replaces black, isort, flake8)
+- **mypy**: Static type checking
+- **pytest**: Testing framework with coverage reporting
+
+Configuration is in `pyproject.toml` with sensible defaults:
+- Line length: 88 characters
+- Python target: 3.10+
+- 90% coverage threshold
+
+```bash
+# Check code quality
+make lint
+
+# Format code
+make format
+```
+
+---
+
+## 🤝 Contributing
+
+### Development Workflow
+
+```bash
+# Set up environment
+make requirements-dev
+make install-package
+
+# Set GitHub token for integration tests (REQUIRED)
+export GITHUB_TOKEN=your_github_token_here
+
+# Make changes
+# ...
+
+# Check quality before committing
+make lint test coverage
+
+# Format code
+make format
+```
+
+**⚠️ Important**: Integration tests require a GitHub personal access token. Without it, tests will fail due to rate limiting (60 requests/hour). With a token, you get 5000 requests/hour.
+
+To create a token:
+1. Go to https://github.com/settings/tokens
+2. Generate a new token (classic) with `repo` scope
+3. Set it: `export GITHUB_TOKEN=your_token_here`
+
+To run only unit tests (no token required):
+```bash
+make test-unit
+```
 
 ### Pull Request Process
 
-All pull requests must pass the automated PR check which includes:
-- **Unit Tests**: Fast tests with mocked dependencies (96% code coverage)
-- **Simple Integration Tests**: Real API tests against GitHub repositories
-- **Coverage Report**: Automatic coverage reporting and badge updates
+All PRs must pass:
+- **Unit Tests**: 80% coverage requirement (automated in CI)
+- **Linting**: ruff and mypy checks (automated in CI)
+- **Coverage Check**: 80% threshold enforcement (automated in CI)
 
-To set up branch protection (repository admin required):
-1. Go to `Settings > Branches` in your GitHub repository
-2. Add rule for `main` branch with these requirements:
-   - ✅ Require status checks to pass before merging
-   - ✅ Require branches to be up to date before merging
-   - ✅ Select the "test" status check from the PR Check workflow
+**Note**: CI runs only unit tests due to GitHub API rate limiting. Integration tests should be run locally with a GitHub token before submitting PRs.
 
-### Automatic Coverage Badge
+Branch protection requires status checks to pass before merging.
 
-The coverage badge is automatically updated on every push to `main`:
-- The workflow extracts the coverage percentage from test runs
-- Updates `.github/badges/coverage.json` with the current percentage
-- The README badge displays the live coverage via shields.io
-- No external services or tokens required
+---
 
+## 📄 Output Format
 
+The tool outputs a Markdown table:
+
+```markdown
+| Date 🔽    | Title                                   | Author          | Change Requested | Approvals |
+| ---------- | --------------------------------------- | --------------- | ---------------- | --------- |
+| 2025-05-01 | Add feature X #[123](https://github...) | [John](https...) | 1                | 2 of 3    |
+| 2025-05-02 | Fix bug Y #[124](https://github...)     | [Jane](https...) | 0                | 1 of 1    |
+```
+
+Column titles and sort order can be customized via command-line options.
+
+---
+
+## 📚 Additional Resources
+
+- [GitHub API Documentation](https://docs.github.com/en/rest)
+- [pytest Documentation](https://docs.pytest.org/)
+- [ruff Documentation](https://docs.astral.sh/ruff/)
+- [mypy Documentation](https://mypy.readthedocs.io/)
+
+---
+
+**Happy coding! 🎉**

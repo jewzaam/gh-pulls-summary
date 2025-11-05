@@ -26,5 +26,6 @@ venv/
 coverage.xml
 .coverage
 htmlcov/
+.coverage-percentage
 
 *.egg-info
