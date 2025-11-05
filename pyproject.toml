@@ -40,7 +40,7 @@ dev = [
 ]
 
 [project.scripts]
-gh-pulls-summary = "gh_pulls_summary:main"
+gh-pulls-summary = "gh_pulls_summary.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

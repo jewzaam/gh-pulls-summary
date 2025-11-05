@@ -4,7 +4,3 @@
 __version__ = "1.0.0"
 __author__ = "Naveen Malik"
 __email__ = "jewzaam@gmail.com"
-
-from .main import main
-
-__all__ = ["main"]
