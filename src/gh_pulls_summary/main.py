@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 # PYTHON_ARGCOMPLETE_OK
 
-import os
-import requests
-import sys
 import argparse
 import logging
-import argcomplete
-import subprocess
+import os
 import re
-from typing import Dict, Any, cast
+import subprocess
+import sys
+import time
+from typing import Any, cast
+
+import argcomplete
+import requests
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -19,21 +21,21 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # Set this in your environment variabl
 
 HEADERS = {
     "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28"
+    "X-GitHub-Api-Version": "2022-11-28",
 }
 
-if GITHUB_TOKEN: # pragma: no cover
+if GITHUB_TOKEN:  # pragma: no cover
     HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
 
 # Custom Exception Classes
 class MissingRepoError(Exception):
     """Raised when repository information cannot be determined."""
-    pass
 
 
 class GitHubAPIError(Exception):
     """Raised when GitHub API requests fail."""
+
     def __init__(self, message, status_code=None, response_text=None):
         self.status_code = status_code
         self.response_text = response_text
@@ -42,22 +44,18 @@ class GitHubAPIError(Exception):
 
 class RateLimitError(GitHubAPIError):
     """Raised when GitHub API rate limit is exceeded."""
-    pass
 
 
 class NetworkError(Exception):
     """Raised when network-related errors occur."""
-    pass
 
 
 class ValidationError(Exception):
     """Raised when input validation fails."""
-    pass
 
 
 class FileOperationError(Exception):
     """Raised when file operations fail."""
-    pass
 
 
 def get_repo_and_owner_from_git():
@@ -70,7 +68,7 @@ def get_repo_and_owner_from_git():
         remote_url = subprocess.check_output(
             ["git", "config", "--get", "remote.origin.url"],
             stderr=subprocess.DEVNULL,
-            text=True
+            text=True,
         ).strip()
 
         # Parse the remote URL to extract owner and repo
@@ -79,7 +77,9 @@ def get_repo_and_owner_from_git():
             _, path = remote_url.split(":", 1)
         elif remote_url.startswith("https://"):
             # HTTPS URL (e.g., https://github.com/owner/repo.git)
-            parts = remote_url.split("/", 5)  # Split into up to 6 parts: ["https:", "", "domain", "owner", "repo", "extra/path..."]
+            parts = remote_url.split(
+                "/", 5
+            )  # Split into up to 6 parts: ["https:", "", "domain", "owner", "repo", "extra/path..."]
             if len(parts) >= 5:
                 path = f"{parts[3]}/{parts[4]}"  # owner/repo
             else:
@@ -104,54 +104,62 @@ def parse_arguments():
     # Get default owner and repo from Git metadata
     default_owner, default_repo = get_repo_and_owner_from_git()
 
-    parser = argparse.ArgumentParser(description="Fetch and summarize GitHub pull requests.")
-    parser.add_argument("--owner", default=default_owner, help="The owner of the repository (e.g., 'microsoft'). If not specified, defaults to the owner from the current directory's Git config.")
-    parser.add_argument("--repo", default=default_repo, help="The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.")
+    parser = argparse.ArgumentParser(
+        description="Fetch and summarize GitHub pull requests."
+    )
     parser.add_argument(
-        "--pr-number",
-        type=int,
-        help="Specify a single pull request number to query."
+        "--owner",
+        default=default_owner,
+        help="The owner of the repository (e.g., 'microsoft'). If not specified, defaults to the owner from the current directory's Git config.",
+    )
+    parser.add_argument(
+        "--repo",
+        default=default_repo,
+        help="The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.",
+    )
+    parser.add_argument(
+        "--pr-number", type=int, help="Specify a single pull request number to query."
     )
     parser.add_argument(
         "--draft-filter",
         choices=["only-drafts", "no-drafts"],
-        help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts."
+        help="Filter pull requests based on draft status. Use 'only-drafts' to include only drafts, or 'no-drafts' to exclude drafts.",
     )
     parser.add_argument(
         "--file-include",
         action="append",
-        help="Regex pattern to include pull requests based on changed file paths. Can be specified multiple times."
+        help="Regex pattern to include pull requests based on changed file paths. Can be specified multiple times.",
     )
     parser.add_argument(
         "--file-exclude",
         action="append",
-        help="Regex pattern to exclude pull requests based on changed file paths. Can be specified multiple times."
+        help="Regex pattern to exclude pull requests based on changed file paths. Can be specified multiple times.",
     )
     parser.add_argument(
         "--url-from-pr-content",
         type=str,
-        help="Regex pattern to extract all unique URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs."
+        help="Regex pattern to extract all unique URLs from added lines in the PR diff. If set, adds a column to the output table with the matched URLs.",
     )
     parser.add_argument(
         "--output-markdown",
         type=str,
-        help="Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only."
+        help="Path to write the generated Markdown output (with timestamp) to a file. If not set, output is printed to stdout only.",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable debug logging and show tracebacks on error."
+        help="Enable debug logging and show tracebacks on error.",
     )
     parser.add_argument(
         "--column-title",
         action="append",
-        help="Override the title for any output column. Format: COLUMN=TITLE. Valid COLUMN values: date, title, author, changes, approvals, urls. Can be specified multiple times."
+        help="Override the title for any output column. Format: COLUMN=TITLE. Valid COLUMN values: date, title, author, changes, approvals, urls. Can be specified multiple times.",
     )
     parser.add_argument(
         "--sort-column",
         type=str,
         default="date",
-        help="Specify which output column to sort by. Valid values: date, title, author, changes, approvals, urls. Default is 'date'."
+        help="Specify which output column to sort by. Valid values: date, title, author, changes, approvals, urls. Default is 'date'.",
     )
 
     # Enable tab completion
@@ -168,15 +176,16 @@ def configure_logging(debug):
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
             logging.StreamHandler(sys.stderr)  # Log to stderr
-        ]
+        ],
     )
 
 
-def github_api_request(endpoint, params=None, use_paging=True):
+def github_api_request(endpoint, params=None, use_paging=True, max_retries=3):
     """
     Makes a GitHub API request and optionally handles pagination.
     Returns all results across all pages if pagination is enabled.
     Returns None if no results are found or an error occurs.
+    Automatically handles rate limiting by waiting and retrying.
     """
     if params is None:
         params = {}
@@ -190,57 +199,103 @@ def github_api_request(endpoint, params=None, use_paging=True):
             params["page"] = page
         url = f"{GITHUB_API_BASE}{endpoint}"
         logging.debug(f"Making API request to {url} with params {params}")
-        
-        try:
-            response = requests.get(url, headers=HEADERS, params=params)
-        except requests.exceptions.ConnectionError as e:
-            raise NetworkError(f"Network connection failed. Please check your internet connection and try again. Details: {e}")
-        except requests.exceptions.Timeout as e:
-            raise NetworkError(f"Request timed out. The GitHub API may be slow. Please try again. Details: {e}")
-        except requests.exceptions.RequestException as e:
-            raise NetworkError(f"Network error occurred while contacting GitHub API. Details: {e}")
 
-        if response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
-            reset_time = response.headers.get("X-RateLimit-Reset", "unknown")
-            raise RateLimitError(
-                f"GitHub API rate limit exceeded. "
-                f"Rate limit will reset at {reset_time}. "
-                f"Consider using a GitHub token to increase your rate limit (5000 requests/hour vs 60 requests/hour). "
-                f"Set the GITHUB_TOKEN environment variable with a personal access token."
-            )
-        
+        # Retry loop for rate limiting
+        retry_count = 0
+        while retry_count <= max_retries:
+            try:
+                response = requests.get(url, headers=HEADERS, params=params)
+            except requests.exceptions.ConnectionError as e:
+                raise NetworkError(
+                    f"Network connection failed. Please check your internet connection and try again. Details: {e}"
+                )
+            except requests.exceptions.Timeout as e:
+                raise NetworkError(
+                    f"Request timed out. The GitHub API may be slow. Please try again. Details: {e}"
+                )
+            except requests.exceptions.RequestException as e:
+                raise NetworkError(
+                    f"Network error occurred while contacting GitHub API. Details: {e}"
+                )
+
+            # Handle rate limiting with automatic retry
+            if (
+                response.status_code == 403
+                and "X-RateLimit-Remaining" in response.headers
+                and response.headers["X-RateLimit-Remaining"] == "0"
+            ):
+                if retry_count >= max_retries:
+                    reset_time = response.headers.get("X-RateLimit-Reset", "unknown")
+                    raise RateLimitError(
+                        f"GitHub API rate limit exceeded after {max_retries} retries. "
+                        f"Rate limit will reset at {reset_time}. "
+                        f"Consider using a GitHub token to increase your rate limit (5000 requests/hour vs 60 requests/hour). "
+                        f"Set the GITHUB_TOKEN environment variable with a personal access token."
+                    )
+
+                # Parse reset time and calculate wait duration
+                reset_timestamp = int(response.headers.get("X-RateLimit-Reset", 0))
+                current_timestamp = int(time.time())
+                wait_seconds = max(
+                    reset_timestamp - current_timestamp + 1, 1
+                )  # Add 1 second buffer
+
+                # Convert timestamps to human-readable format for logging
+                from datetime import datetime
+
+                reset_datetime = datetime.fromtimestamp(reset_timestamp)
+                current_datetime = datetime.fromtimestamp(current_timestamp)
+
+                logging.warning(
+                    f"Rate limit exceeded. "
+                    f"Current time: {current_timestamp} ({current_datetime.isoformat()}), "
+                    f"Reset time: {reset_timestamp} ({reset_datetime.isoformat()}), "
+                    f"Wait duration: {wait_seconds} seconds ({wait_seconds / 60:.1f} minutes) "
+                    f"(retry {retry_count + 1}/{max_retries})..."
+                )
+                time.sleep(wait_seconds)
+                retry_count += 1
+                continue  # Retry the request
+
+            # If we got here, we didn't hit rate limit, so break out of retry loop
+            break
+
         if response.status_code == 401:
             raise GitHubAPIError(
                 "GitHub API authentication failed. Please check your GITHUB_TOKEN if set. "
                 "You may need to generate a new personal access token from GitHub Settings.",
                 status_code=401,
-                response_text=response.text
+                response_text=response.text,
             )
-        
+
         if response.status_code == 404:
             raise GitHubAPIError(
                 f"GitHub API endpoint not found: {endpoint}. "
                 f"Please verify the repository owner and name are correct.",
                 status_code=404,
-                response_text=response.text
+                response_text=response.text,
             )
-        
+
         if response.status_code != 200:
             raise GitHubAPIError(
                 f"GitHub API request failed with status {response.status_code}. "
                 f"Endpoint: {endpoint}. "
                 f"Response: {response.text}",
                 status_code=response.status_code,
-                response_text=response.text
+                response_text=response.text,
             )
 
         try:
             results = response.json()
         except ValueError as e:
-            raise GitHubAPIError(f"Invalid JSON response from GitHub API. The service may be experiencing issues. Details: {e}")
+            raise GitHubAPIError(
+                f"Invalid JSON response from GitHub API. The service may be experiencing issues. Details: {e}"
+            )
 
-        if results == last_results: # pragma: no cover
-            logging.warning(f"Duplicate results detected for pages {page-1} and {page}. This may indicate a GitHub API issue.")
+        if results == last_results:  # pragma: no cover
+            logging.warning(
+                f"Duplicate results detected for pages {page - 1} and {page}. This may indicate a GitHub API issue."
+            )
             break
 
         # Handle cases where the response is a dictionary
@@ -306,39 +361,51 @@ def fetch_user_details(username):
     """
     url = f"{GITHUB_API_BASE}/users/{username}"
     logging.debug(f"Fetching user details for {username}")
-    
+
     try:
         response = requests.get(url, headers=HEADERS)
-    except requests.exceptions.ConnectionError as e:
-        raise NetworkError(f"Network connection failed while fetching user details for {username}. Please check your internet connection and try again.")
-    except requests.exceptions.Timeout as e:
-        raise NetworkError(f"Request timed out while fetching user details for {username}. The GitHub API may be slow. Please try again.")
+    except requests.exceptions.ConnectionError:
+        raise NetworkError(
+            f"Network connection failed while fetching user details for {username}. Please check your internet connection and try again."
+        )
+    except requests.exceptions.Timeout:
+        raise NetworkError(
+            f"Request timed out while fetching user details for {username}. The GitHub API may be slow. Please try again."
+        )
     except requests.exceptions.RequestException as e:
-        raise NetworkError(f"Network error occurred while fetching user details for {username}. Details: {e}")
-    
+        raise NetworkError(
+            f"Network error occurred while fetching user details for {username}. Details: {e}"
+        )
+
     if response.status_code == 404:
         logging.debug(f"User {username} not found (404), returning None")
         return None
-    elif response.status_code == 403 and "X-RateLimit-Remaining" in response.headers and response.headers["X-RateLimit-Remaining"] == "0":
+    if (
+        response.status_code == 403
+        and "X-RateLimit-Remaining" in response.headers
+        and response.headers["X-RateLimit-Remaining"] == "0"
+    ):
         reset_time = response.headers.get("X-RateLimit-Reset", "unknown")
         raise RateLimitError(
             f"GitHub API rate limit exceeded while fetching user {username}. "
             f"Rate limit will reset at {reset_time}. "
             f"Consider using a GitHub token to increase your rate limit."
         )
-    elif response.status_code != 200:
+    if response.status_code != 200:
         raise GitHubAPIError(
             f"Failed to fetch user details for {username}. "
             f"GitHub API returned status {response.status_code}. "
             f"Response: {response.text}",
             status_code=response.status_code,
-            response_text=response.text
+            response_text=response.text,
         )
-    
+
     try:
         return response.json()
     except ValueError as e:
-        raise GitHubAPIError(f"Invalid JSON response when fetching user details for {username}. The GitHub API may be experiencing issues. Details: {e}")
+        raise GitHubAPIError(
+            f"Invalid JSON response when fetching user details for {username}. The GitHub API may be experiencing issues. Details: {e}"
+        )
 
 
 def fetch_pr_files(owner, repo, pr_number):
@@ -363,44 +430,58 @@ def fetch_pr_diff(owner, repo, pr_number):
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
     headers = HEADERS.copy()
     headers["Accept"] = "application/vnd.github.v3.diff"
-    
+
     try:
         response = requests.get(url, headers=headers)
-    except requests.exceptions.ConnectionError as e:
-        raise NetworkError(f"Network connection failed while fetching diff for PR #{pr_number}. Please check your internet connection and try again.")
-    except requests.exceptions.Timeout as e:
-        raise NetworkError(f"Request timed out while fetching diff for PR #{pr_number}. The GitHub API may be slow. Please try again.")
+    except requests.exceptions.ConnectionError:
+        raise NetworkError(
+            f"Network connection failed while fetching diff for PR #{pr_number}. Please check your internet connection and try again."
+        )
+    except requests.exceptions.Timeout:
+        raise NetworkError(
+            f"Request timed out while fetching diff for PR #{pr_number}. The GitHub API may be slow. Please try again."
+        )
     except requests.exceptions.RequestException as e:
-        raise NetworkError(f"Network error occurred while fetching diff for PR #{pr_number}. Details: {e}")
-    
+        raise NetworkError(
+            f"Network error occurred while fetching diff for PR #{pr_number}. Details: {e}"
+        )
+
     if response.status_code == 404:
         raise GitHubAPIError(
             f"Pull request #{pr_number} not found in repository {owner}/{repo}. "
             f"Please verify the PR number and repository are correct.",
             status_code=404,
-            response_text=response.text
+            response_text=response.text,
         )
-    elif response.status_code == 403:
+    if response.status_code == 403:
         raise GitHubAPIError(
             f"Access denied when fetching diff for PR #{pr_number}. "
             f"The repository may be private or you may have exceeded rate limits. "
             f"Consider using a GitHub token with appropriate permissions.",
             status_code=403,
-            response_text=response.text
+            response_text=response.text,
         )
-    elif response.status_code != 200:
+    if response.status_code != 200:
         raise GitHubAPIError(
             f"Failed to fetch diff for PR #{pr_number}. "
             f"GitHub API returned status {response.status_code}. "
             f"Response: {response.text}",
             status_code=response.status_code,
-            response_text=response.text
+            response_text=response.text,
         )
-    
+
     return response.text
 
 
-def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include=None, file_exclude=None, pr_number=None, url_from_pr_content=None):
+def fetch_and_process_pull_requests(
+    owner,
+    repo,
+    draft_filter=None,
+    file_include=None,
+    file_exclude=None,
+    pr_number=None,
+    url_from_pr_content=None,
+):
     """
     Fetches and processes pull requests for the specified repository.
     If a single PR number is specified, only that PR is fetched and processed.
@@ -436,7 +517,7 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             )
 
     for pr in prs:
-        pr = cast(Dict[str, Any], pr)  # Type cast to fix linter errors
+        pr = cast(dict[str, Any], pr)  # Type cast to fix linter errors
         logging.info(f"Processing PR #{pr['number']} - {pr['title']}")
 
         # Apply draft filter if specified
@@ -454,18 +535,32 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             # Fetch files changed in the PR
             files = fetch_pr_files(owner, repo, pr_number)
             if files is None:
-                logging.warning(f"Failed to fetch files for PR #{pr_number}. File filters will be ignored for this PR. This may be due to network issues or API rate limits.")
+                logging.warning(
+                    f"Failed to fetch files for PR #{pr_number}. File filters will be ignored for this PR. This may be due to network issues or API rate limits."
+                )
                 files = []
             file_paths = [file["filename"] for file in files]
 
             # Check file-exclude filters first
-            if file_exclude and any(pattern.search(file_path) for pattern in file_exclude for file_path in file_paths):
-                logging.debug(f"Excluding PR #{pr_number} due to file-exclude filter match")
+            if file_exclude and any(
+                pattern.search(file_path)
+                for pattern in file_exclude
+                for file_path in file_paths
+            ):
+                logging.debug(
+                    f"Excluding PR #{pr_number} due to file-exclude filter match"
+                )
                 continue
 
             # Check file-include filters
-            if file_include and not any(pattern.search(file_path) for pattern in file_include for file_path in file_paths):
-                logging.debug(f"Excluding PR #{pr_number} due to no file-include filter match")
+            if file_include and not any(
+                pattern.search(file_path)
+                for pattern in file_include
+                for file_path in file_paths
+            ):
+                logging.debug(
+                    f"Excluding PR #{pr_number} due to no file-include filter match"
+                )
                 continue
 
         pr_title = pr["title"]
@@ -479,7 +574,9 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             for event in events:
                 if event["event"] == "ready_for_review":
                     event_date = event["created_at"]
-                    logging.debug(f"PR #{pr_number} marked ready for review on {event_date}")
+                    logging.debug(
+                        f"PR #{pr_number} marked ready for review on {event_date}"
+                    )
                     if not pr_ready_date or event_date > pr_ready_date:
                         pr_ready_date = event_date
 
@@ -491,22 +588,30 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
         # Fetch author details
         author_details = fetch_user_details(pr_author)
         if author_details is not None:
-            author_details = cast(Dict[str, Any], author_details)  # Type cast to fix linter errors
-            pr_author_name = author_details.get("name") or pr_author  # Fallback to username if name is None
+            author_details = cast(
+                dict[str, Any], author_details
+            )  # Type cast to fix linter errors
+            pr_author_name = (
+                author_details.get("name") or pr_author
+            )  # Fallback to username if name is None
             pr_author_url = author_details.get("html_url")
         else:
-            logging.warning(f"Failed to fetch author details for {pr_author}. Using username as fallback. This may be due to network issues, API rate limits, or the user account being unavailable.")
+            logging.warning(
+                f"Failed to fetch author details for {pr_author}. Using username as fallback. This may be due to network issues, API rate limits, or the user account being unavailable."
+            )
             pr_author_name = pr_author
             pr_author_url = f"https://github.com/{pr_author}"
 
         # Fetch reviews and approvals
         reviews = fetch_reviews(owner, repo, pr_number)
         if reviews is None:
-            logging.warning(f"Failed to fetch reviews for PR #{pr_number}. Review counts will be set to 0. This may be due to network issues or API rate limits.")
+            logging.warning(
+                f"Failed to fetch reviews for PR #{pr_number}. Review counts will be set to 0. This may be due to network issues or API rate limits."
+            )
             reviews = []
-            
+
         # Map to most recent review state per user
-        user_latest_review = {}
+        user_latest_review: dict[str, dict[str, Any]] = {}
         for review in reviews:
             user = review["user"]["login"]
             submitted_at = review.get("submitted_at")
@@ -515,11 +620,21 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             if not submitted_at:
                 continue
             # If user not seen or this review is newer, update
-            if user not in user_latest_review or submitted_at > user_latest_review[user]["submitted_at"]:
+            if (
+                user not in user_latest_review
+                or submitted_at > user_latest_review[user]["submitted_at"]
+            ):
                 # If the new state is "COMMENTED" but the existing state is not "COMMENTED", ignore this review
-                if user in user_latest_review and user_latest_review[user]["state"] != "COMMENTED" and state == "COMMENTED":
+                if (
+                    user in user_latest_review
+                    and user_latest_review[user]["state"] != "COMMENTED"
+                    and state == "COMMENTED"
+                ):
                     continue
-                user_latest_review[user] = {"state": state, "submitted_at": submitted_at}
+                user_latest_review[user] = {
+                    "state": state,
+                    "submitted_at": submitted_at,
+                }
 
         states = [data["state"] for data in user_latest_review.values()]
         pr_reviews = len(user_latest_review)
@@ -532,30 +647,42 @@ def fetch_and_process_pull_requests(owner, repo, draft_filter=None, file_include
             diff = fetch_pr_diff(owner, repo, pr_number)
             if diff is not None:
                 for line in diff.splitlines():
-                    if line.startswith('+') and not line.startswith('+++'):
+                    if line.startswith("+") and not line.startswith("+++"):
                         matches = url_regex_compiled.findall(line)
                         for match in matches:
-                            url_text = match.rstrip("/").split("/")[-1] if "/" in match else match
-                            pr_body_urls_dict[url_text] = match  # last occurrence wins if duplicate text
+                            url_text = (
+                                match.rstrip("/").split("/")[-1]
+                                if "/" in match
+                                else match
+                            )
+                            pr_body_urls_dict[url_text] = (
+                                match  # last occurrence wins if duplicate text
+                            )
                 # Sort the dict by url_text
-                pr_body_urls_dict = dict(sorted(pr_body_urls_dict.items(), key=lambda x: x[0]))
+                pr_body_urls_dict = dict(
+                    sorted(pr_body_urls_dict.items(), key=lambda x: x[0])
+                )
             else:
-                logging.warning(f"Failed to fetch diff for PR #{pr_number}. URL extraction will be skipped for this PR. This may be due to network issues or API rate limits.")
+                logging.warning(
+                    f"Failed to fetch diff for PR #{pr_number}. URL extraction will be skipped for this PR. This may be due to network issues or API rate limits."
+                )
 
-        pull_requests.append({
-            "date": pr_ready_date,
-            "title": pr_title,
-            "number": pr_number,
-            "url": pr_url,
-            "author_name": pr_author_name,
-            "author_url": pr_author_url,
-            "reviews": pr_reviews,
-            "approvals": pr_approvals,
-            "changes": pr_changes,
-            "pr_body_urls_dict": pr_body_urls_dict,
-        })
+        pull_requests.append(
+            {
+                "date": pr_ready_date,
+                "title": pr_title,
+                "number": pr_number,
+                "url": pr_url,
+                "author_name": pr_author_name,
+                "author_url": pr_author_url,
+                "reviews": pr_reviews,
+                "approvals": pr_approvals,
+                "changes": pr_changes,
+                "pr_body_urls_dict": pr_body_urls_dict,
+            }
+        )
 
-    logging.info("Done loading PR data.")    
+    logging.info("Done loading PR data.")
 
     return pull_requests
 
@@ -571,7 +698,7 @@ def parse_column_titles(args):
         "author": "Author",
         "changes": "Change Requested",
         "approvals": "Approvals",
-        "urls": "URLs"
+        "urls": "URLs",
     }
     custom_titles = {}
     if hasattr(args, "column_title") and args.column_title:
@@ -582,7 +709,9 @@ def parse_column_titles(args):
                 if col in default_titles:
                     custom_titles[col] = val.strip()
                 else:
-                    logging.warning(f"Invalid column name '{col}' in --column-title. Valid columns: {', '.join(default_titles.keys())}")
+                    logging.warning(
+                        f"Invalid column name '{col}' in --column-title. Valid columns: {', '.join(default_titles.keys())}"
+                    )
     return {**default_titles, **custom_titles}
 
 
@@ -610,11 +739,11 @@ def create_markdown_table_header(titles, url_column):
     header = f"| {titles['date']} | {titles['title']} | {titles['author']} | {titles['changes']} | {titles['approvals']} |"
     if url_column:
         header = header + f" {titles['urls']} |"
-    
+
     separator = "| --- | --- | --- | --- | --- |"
     if url_column:
         separator = separator + " --- |"
-    
+
     return header, separator
 
 
@@ -625,7 +754,9 @@ def create_markdown_table_row(pr, url_column):
     row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
     if url_column:
         if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
-            url_links = " ".join(f"[{text}]({url})" for text, url in pr["pr_body_urls_dict"].items())
+            url_links = " ".join(
+                f"[{text}]({url})" for text, url in pr["pr_body_urls_dict"].items()
+            )
             row = row + f" {url_links} |"
         else:
             row = row + " |"
@@ -640,7 +771,7 @@ def generate_markdown_output(args):
     # Compile regex patterns for file filters
     file_include = None
     file_exclude = None
-    
+
     if args.file_include:
         file_include = []
         for pattern in args.file_include:
@@ -652,7 +783,7 @@ def generate_markdown_output(args):
                     f"Error: {e}. "
                     f"Please provide a valid regular expression pattern."
                 )
-    
+
     if args.file_exclude:
         file_exclude = []
         for pattern in args.file_exclude:
@@ -667,7 +798,13 @@ def generate_markdown_output(args):
 
     # Fetch and process pull requests
     pull_requests = fetch_and_process_pull_requests(
-        args.owner, args.repo, args.draft_filter, file_include, file_exclude, args.pr_number, args.url_from_pr_content
+        args.owner,
+        args.repo,
+        args.draft_filter,
+        file_include,
+        file_exclude,
+        args.pr_number,
+        args.url_from_pr_content,
     )
 
     # Determine if we need to add a URL column
@@ -690,21 +827,25 @@ def generate_markdown_output(args):
     header, separator = create_markdown_table_header(titles, url_column)
     output.append(header)
     output.append(separator)
-    
+
     # Sort by the selected column
     def sort_key(pr):
         key = sort_column
         if key == "urls":
-            return ",".join(pr.get("pr_body_urls_dict", {}).keys()) if pr.get("pr_body_urls_dict") else ""
+            return (
+                ",".join(pr.get("pr_body_urls_dict", {}).keys())
+                if pr.get("pr_body_urls_dict")
+                else ""
+            )
         return pr.get(key, "")
-    
+
     sorted_prs = sorted(pull_requests, key=sort_key)
-    
+
     # Add data rows
     for pr in sorted_prs:
         row = create_markdown_table_row(pr, url_column)
         output.append(row)
-    
+
     return "\n".join(output)
 
 
@@ -713,6 +854,7 @@ def generate_timestamp(current_time=None, generator_name=None, generator_url=Non
     Returns the current timestamp in Markdown syntax, including the generator's name and link if provided.
     """
     from datetime import datetime, timezone
+
     if current_time is None:
         current_time = datetime.now(timezone.utc)
     timestamp = current_time.strftime("**Generated at %Y-%m-%d %H:%MZ**")
@@ -754,7 +896,10 @@ def main():
     # Ensure owner and repo are provided
     if not args.owner or not args.repo:
         print("ERROR: Repository owner and name must be specified.", file=sys.stderr)
-        print("Either provide --owner and --repo arguments, or run the command", file=sys.stderr)
+        print(
+            "Either provide --owner and --repo arguments, or run the command",
+            file=sys.stderr,
+        )
         print("from within a Git repository with a GitHub remote.", file=sys.stderr)
         sys.exit(1)
 
@@ -771,7 +916,7 @@ def main():
         sys.exit(1)
     except GitHubAPIError as e:
         print(f"ERROR: GitHub API error. {e}", file=sys.stderr)
-        if args.debug and hasattr(e, 'status_code'):
+        if args.debug and hasattr(e, "status_code"):
             print(f"Status Code: {e.status_code}", file=sys.stderr)
             print(f"Response: {e.response_text}", file=sys.stderr)
         sys.exit(1)
@@ -790,17 +935,28 @@ def main():
         try:
             with open(args.output_markdown, "w", encoding="utf-8") as f:
                 f.write(f"{timestamp_output}\n{markdown_output}\n")
-            print(f"Markdown output written to: {args.output_markdown}", file=sys.stderr)
+            print(
+                f"Markdown output written to: {args.output_markdown}", file=sys.stderr
+            )
         except PermissionError:
-            print(f"ERROR: Permission denied writing to file: {args.output_markdown}", file=sys.stderr)
+            print(
+                f"ERROR: Permission denied writing to file: {args.output_markdown}",
+                file=sys.stderr,
+            )
             print("Please check file permissions and try again.", file=sys.stderr)
             sys.exit(1)
         except FileNotFoundError:
-            print(f"ERROR: Directory not found for output file: {args.output_markdown}", file=sys.stderr)
+            print(
+                f"ERROR: Directory not found for output file: {args.output_markdown}",
+                file=sys.stderr,
+            )
             print("Please ensure the directory exists and try again.", file=sys.stderr)
             sys.exit(1)
         except OSError as e:
-            print(f"ERROR: Failed to write to file {args.output_markdown}. {e}", file=sys.stderr)
+            print(
+                f"ERROR: Failed to write to file {args.output_markdown}. {e}",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
         try:
@@ -836,12 +992,16 @@ if __name__ == "__main__":  # pragma: no cover
         sys.exit(1)
     except MissingRepoError as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        print("Either provide --owner and --repo arguments, or run the command", file=sys.stderr)
+        print(
+            "Either provide --owner and --repo arguments, or run the command",
+            file=sys.stderr,
+        )
         print("from within a Git repository with a GitHub remote.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"ERROR: An unexpected error occurred. {e}", file=sys.stderr)
         print("If this error persists, please report it as a bug.", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
