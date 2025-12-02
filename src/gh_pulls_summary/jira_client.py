@@ -250,7 +250,10 @@ class JiraClient:
 
     def get_issues_metadata(self, issue_keys: list[str]) -> dict[str, dict[str, Any]]:
         """
-        Fetch metadata for multiple issues efficiently.
+        Fetch metadata for multiple issues efficiently using batch API.
+
+        Uses JIRA search API with JQL to fetch all issues in a single request,
+        avoiding rate limits from multiple individual requests.
 
         Args:
             issue_keys: List of JIRA issue keys
@@ -264,18 +267,63 @@ class JiraClient:
         if not issue_keys:
             return {}
 
-        metadata = {}
-        for issue_key in issue_keys:
-            try:
-                issue_data = self.get_issue(issue_key)
-                metadata[issue_key] = issue_data
-                logging.debug(f"Fetched metadata for {issue_key}")
-            except JiraClientError as e:
-                logging.warning(f"Failed to fetch metadata for {issue_key}: {e}")
-                # Continue with other issues
-                continue
+        # Discover rank field if needed
+        if self._rank_field_id is None:
+            self._rank_field_id = self._discover_rank_field()
 
-        return metadata
+        # Build JQL query to fetch all issues at once
+        # Format: key in (ISSUE-1, ISSUE-2, ISSUE-3)
+        keys_str = ", ".join(issue_keys)
+        jql = f"key in ({keys_str})"
+
+        # Specify fields to fetch
+        fields = ["key", "summary", "status", "issuetype", "priority"]
+        if self._rank_field_id:
+            fields.append(self._rank_field_id)
+
+        params = {
+            "jql": jql,
+            "fields": ",".join(fields),
+            "maxResults": len(issue_keys),
+        }
+
+        try:
+            response = cast(
+                dict[str, Any],
+                self._make_request(
+                    "search", params=params, resource_name="issue search"
+                ),
+            )
+
+            issues = response.get("issues", [])
+            logging.info(
+                f"Batch fetched {len(issues)} JIRA issues in single request (requested {len(issue_keys)})"
+            )
+
+            # Convert to dictionary keyed by issue key
+            metadata = {}
+            for issue in issues:
+                issue_key = issue.get("key")
+                if issue_key:
+                    # Enrich with rank field ID for easier access
+                    if self._rank_field_id:
+                        issue["_rank_field_id"] = self._rank_field_id
+                    metadata[issue_key] = issue
+
+            # Log any issues that weren't found
+            found_keys = set(metadata.keys())
+            requested_keys = set(issue_keys)
+            missing_keys = requested_keys - found_keys
+            if missing_keys:
+                logging.warning(
+                    f"Some issues not found in JIRA: {', '.join(sorted(missing_keys))}"
+                )
+
+            return metadata
+
+        except JiraClientError as e:
+            logging.warning(f"Failed to batch fetch JIRA metadata: {e}")
+            return {}
 
     def extract_rank_value(self, issue_data: dict[str, Any]) -> str | None:
         """

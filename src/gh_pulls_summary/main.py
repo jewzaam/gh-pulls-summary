@@ -674,20 +674,55 @@ def extract_jira_from_file_contents(
     return sorted(issue_keys)
 
 
-def get_rank_for_pr(
-    jira_client: JiraClient | None,
+def extract_issue_keys_from_pr(
     file_contents: list[str],
     issue_patterns: list[str],
     pr_body: str | None = None,
-) -> str | None:
+) -> list[str]:
     """
-    Get the highest priority rank for a PR based on its JIRA issues.
+    Extract JIRA issue keys from a PR without fetching metadata.
 
     Extraction strategy:
     1. First checks PR metadata table (first 50 lines, "Feature / Initiative" row)
     2. Falls back to searching full file contents if metadata extraction fails
 
-    All supplied patterns are tried. File contents are searched completely (not limited to 50 lines).
+    Args:
+        file_contents: List of file content strings to search for JIRA issues
+        issue_patterns: List of regex patterns to extract issue keys
+        pr_body: PR body/description text (optional)
+
+    Returns:
+        List of JIRA issue keys found
+    """
+    if not issue_patterns:
+        return []
+
+    # First, try to extract primary issues from PR metadata table
+    issue_keys = []
+    if pr_body:
+        primary_issues = extract_primary_jira_from_metadata(pr_body, issue_patterns)
+        if primary_issues:
+            issue_keys = primary_issues
+            logging.debug(f"Found JIRA issues in metadata: {', '.join(primary_issues)}")
+
+    # Fall back to extracting from full file contents if no metadata found
+    if not issue_keys:
+        issue_keys = extract_jira_from_file_contents(file_contents, issue_patterns)
+        if issue_keys:
+            logging.debug(f"Found JIRA issues in file contents: {issue_keys}")
+
+    return issue_keys
+
+
+def get_rank_for_pr(
+    jira_client: JiraClient | None,
+    issue_keys: list[str],
+    jira_metadata_cache: dict[str, dict[str, Any]],
+) -> str | None:
+    """
+    Get the highest priority rank for a PR based on its JIRA issues.
+
+    Uses pre-fetched JIRA metadata to avoid redundant API calls.
 
     Filtering rules:
     - Only include Feature and Initiative issue types
@@ -697,41 +732,21 @@ def get_rank_for_pr(
 
     Args:
         jira_client: JIRA client instance
-        file_contents: List of file content strings to search for JIRA issues (full contents)
-        issue_patterns: List of regex patterns to extract issue keys (each pattern should have one capture group)
-        pr_body: PR body/description text (optional)
+        issue_keys: List of JIRA issue keys for this PR
+        jira_metadata_cache: Pre-fetched metadata for all issues
 
     Returns:
         Rank value as string (with pipes replaced by underscores and issue key appended), or None
     """
-    if not jira_client or not issue_patterns:
+    if not jira_client or not issue_keys:
         return None
 
-    # First, try to extract primary issues from PR metadata table (first 50 lines only)
-    issue_keys = []
-    if pr_body:
-        primary_issues = extract_primary_jira_from_metadata(pr_body, issue_patterns)
-        if primary_issues:
-            issue_keys = primary_issues
-            logging.debug(
-                f"Using primary JIRA issues from metadata: {', '.join(primary_issues)}"
-            )
-
-    # Fall back to extracting from full file contents if no metadata found
-    if not issue_keys:
-        issue_keys = extract_jira_from_file_contents(file_contents, issue_patterns)
-        if issue_keys:
-            logging.debug(f"Using JIRA issues from file contents: {issue_keys}")
-
-    if not issue_keys:
-        return None
-
-    # Fetch metadata for all issues
-    try:
-        metadata = jira_client.get_issues_metadata(issue_keys)
-    except JiraClientError as e:
-        logging.warning(f"Failed to fetch JIRA metadata: {e}")
-        return None
+    # Get metadata for this PR's issues from cache
+    metadata = {
+        key: jira_metadata_cache[key]
+        for key in issue_keys
+        if key in jira_metadata_cache
+    }
 
     if not metadata:
         return None
@@ -879,6 +894,66 @@ def fetch_and_process_pull_requests(
                 f"Error: {e}. "
                 f"Please provide a valid regular expression pattern."
             )
+
+    # Preprocessing: Collect all JIRA issue keys and batch fetch metadata
+    jira_metadata_cache: dict[str, dict[str, Any]] = {}
+    pr_issue_keys_map: dict[int, list[str]] = {}
+
+    if jira_client and jira_issue_patterns:
+        logging.info(
+            "Preprocessing: Collecting JIRA issues from all PRs for batch fetch..."
+        )
+        all_issue_keys: set[str] = set()
+
+        for pr in prs:
+            pr = cast(dict[str, Any], pr)
+            pr_number = pr["number"]
+            pr_body = pr.get("body", "")
+            file_contents_list = []
+
+            # Fetch file contents if needed (same logic as main loop)
+            if file_include:
+                pr_ref = pr.get("head", {}).get("sha")
+                if pr_ref:
+                    files = fetch_pr_files(owner, repo, pr_number, github_token)
+                    if files:
+                        matching_files = []
+                        for file in files:
+                            file_path = file.get("filename", "")
+                            if any(
+                                pattern.search(file_path) for pattern in file_include
+                            ):
+                                matching_files.append(file_path)
+
+                        for file_path in matching_files:
+                            content = fetch_file_content(
+                                owner, repo, file_path, pr_ref, github_token
+                            )
+                            if content:
+                                file_contents_list.append(content)
+
+            # Extract issue keys for this PR
+            issue_keys = extract_issue_keys_from_pr(
+                file_contents_list, jira_issue_patterns, pr_body
+            )
+            if issue_keys:
+                pr_issue_keys_map[pr_number] = issue_keys
+                all_issue_keys.update(issue_keys)
+                logging.debug(f"PR #{pr_number}: found {len(issue_keys)} JIRA issues")
+
+        # Batch fetch all metadata at once
+        if all_issue_keys:
+            unique_keys = sorted(all_issue_keys)
+            logging.info(
+                f"Batch fetching metadata for {len(unique_keys)} unique JIRA issues..."
+            )
+            try:
+                jira_metadata_cache = jira_client.get_issues_metadata(unique_keys)
+                logging.info(
+                    f"Successfully fetched metadata for {len(jira_metadata_cache)} issues"
+                )
+            except JiraClientError as e:
+                logging.error(f"Failed to batch fetch JIRA metadata: {e}")
 
     for pr in prs:
         pr = cast(dict[str, Any], pr)  # Type cast to fix linter errors
@@ -1031,44 +1106,11 @@ def fetch_and_process_pull_requests(
                     f"Failed to fetch diff for PR #{pr_number}. URL extraction will be skipped for this PR. This may be due to network issues or API rate limits."
                 )
 
-        # Get rank if JIRA client is configured
+        # Get rank if JIRA client is configured (using pre-fetched metadata)
         pr_rank = None
-        if jira_client and jira_issue_patterns:
-            pr_body = pr.get("body", "")
-            file_contents_list = []
-
-            # Fetch full content of files matching file_include patterns
-            if file_include:
-                # Get ref (commit SHA) from the PR
-                pr_ref = pr.get("head", {}).get("sha")
-                if pr_ref:
-                    # Re-use files list if already fetched, otherwise fetch
-                    if "files" not in locals() or files is None:
-                        files = fetch_pr_files(owner, repo, pr_number, github_token)
-                        if files is None:
-                            files = []
-
-                    # Filter files to only those matching file_include
-                    matching_files = []
-                    for file in files:
-                        file_path = file.get("filename", "")
-                        if any(pattern.search(file_path) for pattern in file_include):
-                            matching_files.append(file_path)
-
-                    # Fetch content for each matching file
-                    for file_path in matching_files:
-                        content = fetch_file_content(
-                            owner, repo, file_path, pr_ref, github_token
-                        )
-                        if content:
-                            file_contents_list.append(content)
-                            logging.debug(
-                                f"Fetched content for {file_path} ({len(content)} chars)"
-                            )
-
-            pr_rank = get_rank_for_pr(
-                jira_client, file_contents_list, jira_issue_patterns, pr_body
-            )
+        if jira_client and pr_number in pr_issue_keys_map:
+            issue_keys = pr_issue_keys_map[pr_number]
+            pr_rank = get_rank_for_pr(jira_client, issue_keys, jira_metadata_cache)
             if pr_rank:
                 logging.debug(f"PR #{pr_number} rank: {pr_rank}")
 

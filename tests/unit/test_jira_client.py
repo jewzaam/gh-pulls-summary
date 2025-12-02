@@ -247,8 +247,7 @@ class TestJiraClient(unittest.TestCase):
         # Should handle exception gracefully
         self.assertIsNone(client._rank_field_id)
 
-    @patch("gh_pulls_summary.jira_client.JiraClient.get_issue")
-    def test_get_issues_metadata_empty(self, mock_get_issue):
+    def test_get_issues_metadata_empty(self):
         """Test get_issues_metadata with empty list."""
         client = JiraClient(
             base_url="https://issues.example.com",
@@ -259,17 +258,22 @@ class TestJiraClient(unittest.TestCase):
         result = client.get_issues_metadata([])
 
         self.assertEqual(result, {})
-        mock_get_issue.assert_not_called()
 
-    @patch("gh_pulls_summary.jira_client.JiraClient.get_issue")
-    def test_get_issues_metadata_with_errors(self, mock_get_issue):
-        """Test get_issues_metadata continues on errors."""
-        # First call succeeds, second fails, third succeeds
-        mock_get_issue.side_effect = [
-            {"key": "ANSTRAT-1", "fields": {}},
-            JiraClientError("Issue not found"),
-            {"key": "ANSTRAT-3", "fields": {}},
-        ]
+    @patch("gh_pulls_summary.jira_client.JiraClient._make_request")
+    def test_get_issues_metadata_batch_success(self, mock_make_request):
+        """Test get_issues_metadata uses batch API."""
+        mock_make_request.return_value = {
+            "issues": [
+                {
+                    "key": "ANSTRAT-1",
+                    "fields": {"summary": "Test 1", "customfield_12345": "0|i00001"},
+                },
+                {
+                    "key": "ANSTRAT-3",
+                    "fields": {"summary": "Test 3", "customfield_12345": "0|i00003"},
+                },
+            ]
+        }
 
         client = JiraClient(
             base_url="https://issues.example.com",
@@ -279,7 +283,13 @@ class TestJiraClient(unittest.TestCase):
 
         result = client.get_issues_metadata(["ANSTRAT-1", "ANSTRAT-2", "ANSTRAT-3"])
 
-        # Should return two successful fetches, skip the failed one
+        # Should use batch search API
+        mock_make_request.assert_called_once()
+        call_args = mock_make_request.call_args
+        self.assertIn("search", call_args[0][0])
+        self.assertIn("jql", call_args[1]["params"])
+
+        # Should return two successful fetches (ANSTRAT-2 not found)
         self.assertEqual(len(result), 2)
         self.assertIn("ANSTRAT-1", result)
         self.assertIn("ANSTRAT-3", result)
@@ -319,12 +329,17 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
     @patch("gh_pulls_summary.main.JiraClient")
     def test_get_rank_for_pr_single_issue(self, mock_jira_client_class):
-        """Test getting rank for PR with single JIRA issue from metadata table."""
+        """Test getting rank for PR with single JIRA issue."""
         from gh_pulls_summary.main import get_rank_for_pr
 
         # Mock JIRA client
         mock_client = Mock()
-        mock_client.get_issues_metadata.return_value = {
+        mock_client.get_issue_type.return_value = "Feature"
+        mock_client.get_issue_status.return_value = "In Progress"
+        mock_client.extract_rank_value.return_value = "0|i00ywg:9"
+
+        # Pre-fetched metadata cache
+        jira_metadata_cache = {
             "ANSTRAT-1660": {
                 "key": "ANSTRAT-1660",
                 "fields": {
@@ -335,26 +350,27 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
                 "_rank_field_id": "customfield_12311940",
             }
         }
-        mock_client.get_issue_type.return_value = "Feature"
-        mock_client.get_issue_status.return_value = "In Progress"
-        mock_client.extract_rank_value.return_value = "0|i00ywg:9"
 
-        file_contents = ["Some content with ANSTRAT-1660 reference"]
-        pr_body = "| **Feature / Initiative** | [ANSTRAT-1660](https://issues.redhat.com/browse/ANSTRAT-1660) |"
+        # Issue keys extracted from PR
+        issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, file_contents, [r"(ANSTRAT-\d+)"], pr_body)
+        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
         # Pipe should be replaced with underscore, issue key appended
         self.assertEqual(rank, "0_i00ywg:9 ANSTRAT-1660")
 
     @patch("gh_pulls_summary.main.JiraClient")
     def test_get_rank_for_pr_multiple_issues(self, mock_jira_client_class):
-        """Test getting rank for PR with multiple JIRA issues - metadata takes priority."""
+        """Test getting rank for PR with multiple JIRA issues."""
         from gh_pulls_summary.main import get_rank_for_pr
 
         # Mock JIRA client
         mock_client = Mock()
-        # Metadata table specifies ANSTRAT-1660 as primary
-        mock_client.get_issues_metadata.return_value = {
+        mock_client.get_issue_type.return_value = "Feature"
+        mock_client.get_issue_status.return_value = "Backlog"
+        mock_client.extract_rank_value.return_value = "0|i00ywh:"
+
+        # Pre-fetched metadata cache - only contains 1660
+        jira_metadata_cache = {
             "ANSTRAT-1660": {
                 "key": "ANSTRAT-1660",
                 "fields": {
@@ -365,17 +381,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
                 "_rank_field_id": "customfield_12311940",
             },
         }
-        mock_client.get_issue_type.return_value = "Feature"
-        mock_client.get_issue_status.return_value = "Backlog"
-        mock_client.extract_rank_value.return_value = "0|i00ywh:"
 
-        # File contents contain multiple issues
-        file_contents = ["Content with ANSTRAT-1660 and ANSTRAT-1579 references"]
-        # But metadata table specifies 1660 as primary
-        pr_body = "| **Feature / Initiative** | [ANSTRAT-1660](https://issues.redhat.com/browse/ANSTRAT-1660) |"
+        # Issue keys extracted from PR (metadata table specified 1660 as primary)
+        issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, file_contents, [r"(ANSTRAT-\d+)"], pr_body)
-        # Should return rank for the primary issue from metadata table
+        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
+        # Should return rank for the primary issue
         self.assertEqual(rank, "0_i00ywh: ANSTRAT-1660")
 
     @patch("gh_pulls_summary.main.JiraClient")
@@ -385,7 +396,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         # Mock JIRA client
         mock_client = Mock()
-        mock_client.get_issues_metadata.return_value = {
+        mock_client.get_issue_type.return_value = "Outcome"
+        mock_client.get_issue_status.return_value = "In Progress"
+        mock_client.extract_rank_value.return_value = "0|i00ywg:9"
+
+        # Pre-fetched metadata cache
+        jira_metadata_cache = {
             "ANSTRAT-1660": {
                 "key": "ANSTRAT-1660",
                 "fields": {
@@ -396,14 +412,11 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
                 "_rank_field_id": "customfield_12311940",
             }
         }
-        mock_client.get_issue_type.return_value = "Outcome"
-        mock_client.get_issue_status.return_value = "In Progress"
-        mock_client.extract_rank_value.return_value = "0|i00ywg:9"
 
-        file_contents = ["Content with ANSTRAT-1660"]
-        pr_body = "| **Feature / Initiative** | [ANSTRAT-1660](https://issues.redhat.com/browse/ANSTRAT-1660) |"
+        # Issue keys extracted from PR
+        issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, file_contents, [r"(ANSTRAT-\d+)"], pr_body)
+        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
         # Should return None because Outcome is filtered out
         self.assertIsNone(rank)
 
@@ -411,10 +424,10 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         """Test getting rank with no JIRA client."""
         from gh_pulls_summary.main import get_rank_for_pr
 
-        file_contents = ["Content with ANSTRAT-1660"]
-        pr_body = "| **Feature / Initiative** | [ANSTRAT-1660](https://issues.redhat.com/browse/ANSTRAT-1660) |"
+        issue_keys = ["ANSTRAT-1660"]
+        jira_metadata_cache = {}
 
-        rank = get_rank_for_pr(None, file_contents, [r"(ANSTRAT-\d+)"], pr_body)
+        rank = get_rank_for_pr(None, issue_keys, jira_metadata_cache)
         self.assertIsNone(rank)
 
     @patch("gh_pulls_summary.main.JiraClient")
@@ -424,7 +437,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         # Mock JIRA client
         mock_client = Mock()
-        mock_client.get_issues_metadata.return_value = {
+        mock_client.get_issue_type.return_value = "Feature"
+        mock_client.get_issue_status.return_value = "Release Pending"
+        mock_client.extract_rank_value.return_value = "0|i00ywg:9"
+
+        # Pre-fetched metadata cache
+        jira_metadata_cache = {
             "ANSTRAT-1660": {
                 "key": "ANSTRAT-1660",
                 "fields": {
@@ -435,14 +453,11 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
                 "_rank_field_id": "customfield_12311940",
             }
         }
-        mock_client.get_issue_type.return_value = "Feature"
-        mock_client.get_issue_status.return_value = "Release Pending"
-        mock_client.extract_rank_value.return_value = "0|i00ywg:9"
 
-        file_contents = ["Content with ANSTRAT-1660"]
-        pr_body = "| **Feature / Initiative** | [ANSTRAT-1660](https://issues.redhat.com/browse/ANSTRAT-1660) |"
+        # Issue keys extracted from PR
+        issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, file_contents, [r"(ANSTRAT-\d+)"], pr_body)
+        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
         # Should return None because Release Pending is not an allowed status
         self.assertIsNone(rank)
 
