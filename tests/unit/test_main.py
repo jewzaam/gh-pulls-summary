@@ -9,6 +9,9 @@ from gh_pulls_summary.main import (
     NetworkError,
     RateLimitError,
     ValidationError,
+    extract_jira_from_file_contents,
+    extract_jira_issue_keys,
+    fetch_file_content,
     fetch_pr_diff,
     fetch_pr_files,
     fetch_single_pull_request,
@@ -45,6 +48,12 @@ class TestMainFunction(unittest.TestCase):
             url_from_pr_content = None
             column_title = None
             sort_column = "date"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            github_token = None
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
 
         args = Args()
         # Patch fetch_and_process_pull_requests to avoid network
@@ -100,6 +109,12 @@ class TestMainFunction(unittest.TestCase):
             url_from_pr_content = None
             column_title = ["date=Ready Date", "approvals=Total Approvals"]
             sort_column = "date"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            github_token = None
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
 
         args = Args()
         with patch(
@@ -141,6 +156,12 @@ class TestMainFunction(unittest.TestCase):
             url_from_pr_content = None
             column_title = None
             sort_column = "approvals"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            github_token = None
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
 
         args = Args()
         with patch(
@@ -446,9 +467,13 @@ class TestGithubApiHelpers(unittest.TestCase):
     def test_fetch_single_pull_request(self, mock_github_api_request):
         mock_github_api_request.return_value = {"number": 42, "title": "Test PR"}
         result = fetch_single_pull_request("owner", "repo", 42)
-        mock_github_api_request.assert_called_once_with(
-            "/repos/owner/repo/pulls/42", use_paging=False
-        )
+        # Check that the function was called with the expected arguments
+        # The headers parameter will be populated by get_github_headers(None)
+        self.assertEqual(mock_github_api_request.call_count, 1)
+        call_args = mock_github_api_request.call_args
+        self.assertEqual(call_args[0][0], "/repos/owner/repo/pulls/42")
+        self.assertEqual(call_args[1]["use_paging"], False)
+        self.assertIn("headers", call_args[1])
         self.assertEqual(result, {"number": 42, "title": "Test PR"})
 
     @patch("gh_pulls_summary.main.github_api_request")
@@ -458,9 +483,13 @@ class TestGithubApiHelpers(unittest.TestCase):
             {"filename": "file2.py"},
         ]
         result = fetch_pr_files("owner", "repo", 123)
-        mock_github_api_request.assert_called_once_with(
-            "/repos/owner/repo/pulls/123/files", use_paging=True
-        )
+        # Check that the function was called with the expected arguments
+        # The headers parameter will be populated by get_github_headers(None)
+        self.assertEqual(mock_github_api_request.call_count, 1)
+        call_args = mock_github_api_request.call_args
+        self.assertEqual(call_args[0][0], "/repos/owner/repo/pulls/123/files")
+        self.assertEqual(call_args[1]["use_paging"], True)
+        self.assertIn("headers", call_args[1])
         self.assertEqual(result, [{"filename": "file1.py"}, {"filename": "file2.py"}])
 
     @patch("gh_pulls_summary.main.requests.get")
@@ -577,6 +606,7 @@ class TestHelperFunctions(unittest.TestCase):
             "changes": "Change Requested",
             "approvals": "Approvals",
             "urls": "URLs",
+            "rank": "RANK",
         }
         self.assertEqual(result, expected)
 
@@ -601,6 +631,7 @@ class TestHelperFunctions(unittest.TestCase):
             "changes": "Change Requested",
             "approvals": "Total Approvals",
             "urls": "URLs",
+            "rank": "RANK",
         }
         self.assertEqual(result, expected)
 
@@ -616,7 +647,7 @@ class TestHelperFunctions(unittest.TestCase):
         with patch("gh_pulls_summary.main.logging.warning") as mock_warning:
             result = parse_column_titles(args)
             mock_warning.assert_called_once_with(
-                "Invalid column name 'invalid' in --column-title. Valid columns: date, title, author, changes, approvals, urls"
+                "Invalid column name 'invalid' in --column-title. Valid columns: date, title, author, changes, approvals, urls, rank"
             )
 
         # Should ignore invalid column but keep valid ones
@@ -627,6 +658,7 @@ class TestHelperFunctions(unittest.TestCase):
             "changes": "Change Requested",
             "approvals": "Approvals",
             "urls": "URLs",
+            "rank": "RANK",
         }
         self.assertEqual(result, expected)
 
@@ -648,6 +680,7 @@ class TestHelperFunctions(unittest.TestCase):
             "changes": "Change Requested",
             "approvals": "Approvals",
             "urls": "URLs",
+            "rank": "RANK",
         }
         self.assertEqual(result, expected)
 
@@ -669,6 +702,7 @@ class TestHelperFunctions(unittest.TestCase):
             "changes": "Change Requested",
             "approvals": "Approvals",
             "urls": "URLs",
+            "rank": "RANK",
         }
         self.assertEqual(result, expected)
 
@@ -818,7 +852,9 @@ class TestHelperFunctions(unittest.TestCase):
             "approvals": "Approvals",
         }
 
-        header, separator = create_markdown_table_header(titles, url_column=False)
+        header, separator = create_markdown_table_header(
+            titles, url_column=False, rank_column=False
+        )
 
         expected_header = "| Date 🔽 | Title | Author | Change Requested | Approvals |"
         expected_separator = "| --- | --- | --- | --- | --- |"
@@ -839,7 +875,9 @@ class TestHelperFunctions(unittest.TestCase):
             "urls": "URLs",
         }
 
-        header, separator = create_markdown_table_header(titles, url_column=True)
+        header, separator = create_markdown_table_header(
+            titles, url_column=True, rank_column=False
+        )
 
         expected_header = (
             "| Date | Title | Author | Change Requested | Approvals 🔽 | URLs |"
@@ -865,7 +903,7 @@ class TestHelperFunctions(unittest.TestCase):
             "reviews": 3,
         }
 
-        result = create_markdown_table_row(pr, url_column=False)
+        result = create_markdown_table_row(pr, url_column=False, rank_column=False)
 
         expected = "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 3 |"
         self.assertEqual(result, expected)
@@ -890,7 +928,7 @@ class TestHelperFunctions(unittest.TestCase):
             },
         }
 
-        result = create_markdown_table_row(pr, url_column=True)
+        result = create_markdown_table_row(pr, url_column=True, rank_column=False)
 
         expected = "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 0 | 1 of 1 | [bar123](https://example.com/foo/bar123) [baz456](https://example.com/foo/baz456) |"
         self.assertEqual(result, expected)
@@ -912,7 +950,7 @@ class TestHelperFunctions(unittest.TestCase):
             "pr_body_urls_dict": {},
         }
 
-        result = create_markdown_table_row(pr, url_column=True)
+        result = create_markdown_table_row(pr, url_column=True, rank_column=False)
 
         expected = "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 2 | 0 of 2 | |"
         self.assertEqual(result, expected)
@@ -934,10 +972,91 @@ class TestHelperFunctions(unittest.TestCase):
             # No pr_body_urls_dict key
         }
 
-        result = create_markdown_table_row(pr, url_column=True)
+        result = create_markdown_table_row(pr, url_column=True, rank_column=False)
 
         expected = "| 2025-05-03 | Update docs #[125](https://github.com/owner/repo/pull/125) | [Bob Wilson](https://github.com/bobwilson) | 0 | 1 of 1 | |"
         self.assertEqual(result, expected)
+
+
+class TestFetchFileContent(unittest.TestCase):
+    """Test cases for fetch_file_content function."""
+
+    @patch("gh_pulls_summary.main.requests.get")
+    def test_fetch_file_content_success(self, mock_get):
+        """Test successful file content fetch."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = "File content here"
+        mock_get.return_value = mock_response
+
+        result = fetch_file_content("owner", "repo", "path/to/file.md", "main", "token")
+
+        self.assertEqual(result, "File content here")
+        mock_get.assert_called_once()
+
+    @patch("gh_pulls_summary.main.requests.get")
+    def test_fetch_file_content_404(self, mock_get):
+        """Test file not found (404)."""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_get.return_value = mock_response
+
+        result = fetch_file_content("owner", "repo", "missing.md", "main", "token")
+
+        self.assertIsNone(result)
+
+    @patch("gh_pulls_summary.main.requests.get")
+    def test_fetch_file_content_403(self, mock_get):
+        """Test access denied or rate limit (403)."""
+        mock_response = Mock()
+        mock_response.status_code = 403
+        mock_get.return_value = mock_response
+
+        result = fetch_file_content("owner", "repo", "file.md", "main", "token")
+
+        self.assertIsNone(result)
+
+    @patch("gh_pulls_summary.main.requests.get")
+    def test_fetch_file_content_other_error(self, mock_get):
+        """Test other HTTP errors."""
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_get.return_value = mock_response
+
+        result = fetch_file_content("owner", "repo", "file.md", "main", "token")
+
+        self.assertIsNone(result)
+
+    @patch("gh_pulls_summary.main.requests.get")
+    def test_fetch_file_content_exception(self, mock_get):
+        """Test exception handling."""
+        mock_get.side_effect = Exception("Network error")
+
+        result = fetch_file_content("owner", "repo", "file.md", "main", "token")
+
+        self.assertIsNone(result)
+
+
+class TestExtractJiraFunctions(unittest.TestCase):
+    """Test cases for JIRA extraction helper functions."""
+
+    def test_extract_jira_issue_keys_invalid_regex(self):
+        """Test handling of invalid regex pattern."""
+        url_dict = {"http://example.com": "text with ANSTRAT-1234"}
+
+        result = extract_jira_issue_keys(url_dict, r"(ANSTRAT-\d+[")  # Invalid regex
+
+        self.assertEqual(result, [])
+
+    def test_extract_jira_from_file_contents_invalid_regex(self):
+        """Test handling of invalid regex pattern in file contents."""
+        file_contents = ["Content with ANSTRAT-1234"]
+
+        result = extract_jira_from_file_contents(
+            file_contents, [r"(ANSTRAT-\d+["]
+        )  # Invalid regex
+
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":

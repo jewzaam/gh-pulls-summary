@@ -7,7 +7,6 @@ import unittest
 from typing import Any, cast
 
 from gh_pulls_summary.main import (
-    GITHUB_TOKEN,
     fetch_and_process_pull_requests,
     fetch_issue_events,
     fetch_pr_files,
@@ -39,7 +38,8 @@ class IntegrationTestBase(unittest.TestCase):
     def setUpClass(cls):
         """Set up class-level test fixtures."""
         # Warn if using GitHub token in integration tests
-        if GITHUB_TOKEN:
+        github_token = os.getenv("GITHUB_TOKEN")
+        if github_token:
             logging.warning(
                 "GITHUB_TOKEN is set - integration tests will use authenticated requests"
             )
@@ -65,10 +65,11 @@ class IntegrationTestBase(unittest.TestCase):
         try:
             import requests
 
+            github_token = os.getenv("GITHUB_TOKEN")
             response = requests.get(
                 "https://api.github.com/rate_limit",
-                headers={"Authorization": f"Bearer {GITHUB_TOKEN}"}
-                if GITHUB_TOKEN
+                headers={"Authorization": f"Bearer {github_token}"}
+                if github_token
                 else {},
             )
             if response.status_code == 200:
@@ -151,7 +152,12 @@ class TestGitHubApiIntegration(IntegrationTestBase):
     def test_fetch_single_pull_request_real_repo(self):
         """Test fetching a single pull request from real repository."""
         pr_number = self.KNOWN_PR_NUMBERS[0]
-        pr = fetch_single_pull_request(self.TEST_OWNER, self.TEST_REPO, pr_number)
+        pr = fetch_single_pull_request(
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            pr_number,
+            github_token=os.getenv("GITHUB_TOKEN"),
+        )
 
         self.assertIsNotNone(pr)
         self.assertIsInstance(pr, dict)
@@ -164,7 +170,12 @@ class TestGitHubApiIntegration(IntegrationTestBase):
     def test_fetch_pr_files_real_repo(self):
         """Test fetching files for a pull request from real repository."""
         pr_number = self.KNOWN_PR_NUMBERS[0]
-        files = fetch_pr_files(self.TEST_OWNER, self.TEST_REPO, pr_number)
+        files = fetch_pr_files(
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            pr_number,
+            github_token=os.getenv("GITHUB_TOKEN"),
+        )
 
         self.assertIsNotNone(files)
         self.assertIsInstance(files, list)
@@ -177,7 +188,9 @@ class TestGitHubApiIntegration(IntegrationTestBase):
     def test_fetch_user_details_real_user(self):
         """Test fetching user details for a real GitHub user."""
         # Use the repo owner as a known user
-        user_details = fetch_user_details(self.TEST_OWNER)
+        user_details = fetch_user_details(
+            self.TEST_OWNER, github_token=os.getenv("GITHUB_TOKEN")
+        )
 
         self.assertIsNotNone(user_details)
         self.assertIsInstance(user_details, dict)
@@ -188,7 +201,12 @@ class TestGitHubApiIntegration(IntegrationTestBase):
     def test_fetch_issue_events_real_repo(self):
         """Test fetching issue events for a real pull request."""
         pr_number = self.KNOWN_PR_NUMBERS[0]
-        events = fetch_issue_events(self.TEST_OWNER, self.TEST_REPO, pr_number)
+        events = fetch_issue_events(
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            pr_number,
+            github_token=os.getenv("GITHUB_TOKEN"),
+        )
 
         self.assertIsNotNone(events)
         self.assertIsInstance(events, list)
@@ -202,7 +220,12 @@ class TestGitHubApiIntegration(IntegrationTestBase):
     def test_fetch_reviews_real_repo(self):
         """Test fetching reviews for a real pull request."""
         pr_number = self.KNOWN_PR_NUMBERS[0]
-        reviews = fetch_reviews(self.TEST_OWNER, self.TEST_REPO, pr_number)
+        reviews = fetch_reviews(
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            pr_number,
+            github_token=os.getenv("GITHUB_TOKEN"),
+        )
 
         self.assertIsNotNone(reviews)
         self.assertIsInstance(reviews, list)
@@ -219,7 +242,9 @@ class TestEndToEndIntegration(IntegrationTestBase):
 
     def test_fetch_and_process_pull_requests_real_repo(self):
         """Test complete pull request processing workflow."""
-        prs = fetch_and_process_pull_requests(self.TEST_OWNER, self.TEST_REPO)
+        prs = fetch_and_process_pull_requests(
+            self.TEST_OWNER, self.TEST_REPO, github_token=os.getenv("GITHUB_TOKEN")
+        )
 
         self.assertIsNotNone(prs)
         self.assertIsInstance(prs, list)
@@ -280,6 +305,12 @@ class TestEndToEndIntegration(IntegrationTestBase):
             url_from_pr_content = None
             column_title = None
             sort_column = "date"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
+            github_token = os.getenv("GITHUB_TOKEN")
 
         args = Args()
         markdown_output = generate_markdown_output(args)
@@ -359,6 +390,11 @@ class TestRealWorldScenarios(IntegrationTestBase):
                 url_from_pr_content = None
                 column_title = None
                 sort_column = sort_col
+                include_rank = False
+                jira_issue_pattern = r"(ANSTRAT-\d+)"
+                jira_url = None
+                jira_token = None
+                github_token = os.getenv("GITHUB_TOKEN")
 
             args = Args()
             markdown_output = generate_markdown_output(args)
@@ -376,19 +412,30 @@ class TestRateLimitingAndErrors(IntegrationTestBase):
     def test_nonexistent_repo_error_handling(self):
         """Test error handling with non-existent repository."""
         with self.assertRaises(Exception):
-            fetch_pull_requests("nonexistent", "nonexistent-repo")
+            fetch_pull_requests(
+                "nonexistent",
+                "nonexistent-repo",
+                github_token=os.getenv("GITHUB_TOKEN"),
+            )
 
     def test_nonexistent_pr_error_handling(self):
         """Test error handling with non-existent PR number."""
         # Use a very high PR number that shouldn't exist
         with self.assertRaises(Exception):
-            fetch_single_pull_request(self.TEST_OWNER, self.TEST_REPO, 99999)
+            fetch_single_pull_request(
+                self.TEST_OWNER,
+                self.TEST_REPO,
+                99999,
+                github_token=os.getenv("GITHUB_TOKEN"),
+            )
 
     def test_rate_limit_awareness(self):
         """Test that we can make multiple requests without hitting rate limits."""
         # Make several requests in sequence
         for i in range(3):
-            prs = fetch_pull_requests(self.TEST_OWNER, self.TEST_REPO)
+            prs = fetch_pull_requests(
+                self.TEST_OWNER, self.TEST_REPO, github_token=os.getenv("GITHUB_TOKEN")
+            )
             self.assertIsNotNone(prs)
             time.sleep(0.1)  # Small delay between requests
 

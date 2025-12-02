@@ -5,7 +5,6 @@ import os
 import unittest
 
 from gh_pulls_summary.main import (
-    GITHUB_TOKEN,
     fetch_and_process_pull_requests,
     generate_markdown_output,
     get_repo_and_owner_from_git,
@@ -37,8 +36,9 @@ class SimpleIntegrationTests(unittest.TestCase):
             import requests
 
             headers = {}
-            if GITHUB_TOKEN:
-                headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+            github_token = os.getenv("GITHUB_TOKEN")
+            if github_token:
+                headers["Authorization"] = f"Bearer {github_token}"
 
             response = requests.get(
                 "https://api.github.com/rate_limit", headers=headers, timeout=10
@@ -77,7 +77,10 @@ class SimpleIntegrationTests(unittest.TestCase):
 
         try:
             prs = fetch_and_process_pull_requests(
-                self.TEST_OWNER, self.TEST_REPO, pr_number=pr_number
+                self.TEST_OWNER,
+                self.TEST_REPO,
+                pr_number=pr_number,
+                github_token=os.getenv("GITHUB_TOKEN"),
             )
 
             # Validate results
@@ -112,6 +115,12 @@ class SimpleIntegrationTests(unittest.TestCase):
             url_from_pr_content = None
             column_title = None
             sort_column = "date"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
+            github_token = os.getenv("GITHUB_TOKEN")
 
         try:
             args = Args()
@@ -143,7 +152,10 @@ class SimpleIntegrationTests(unittest.TestCase):
         try:
             # Test filtering for non-draft PRs
             prs_no_drafts = fetch_and_process_pull_requests(
-                self.TEST_OWNER, self.TEST_REPO, draft_filter="no-drafts"
+                self.TEST_OWNER,
+                self.TEST_REPO,
+                draft_filter="no-drafts",
+                github_token=os.getenv("GITHUB_TOKEN"),
             )
 
             self.assertIsNotNone(prs_no_drafts)
