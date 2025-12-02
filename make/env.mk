@@ -2,7 +2,7 @@
 # Environment Setup Targets
 # ==========================
 
-.PHONY: venv uv requirements requirements-dev install-package clean
+.PHONY: venv uv requirements requirements-dev install-package install clean
 
 venv: ## Create Python virtual environment
 	@if [ ! -d "$(VENV_DIR)" ]; then \
@@ -32,6 +32,11 @@ requirements-dev: venv uv requirements ## Install all dev dependencies
 install-package: requirements-dev ## Install package in editable mode (needed for tests)
 	@$(VENV_UV) pip install -e .
 	@echo "✅ Package installed in editable mode in $(VENV_DIR)"
+
+install: ## Install package to user environment (~/.local)
+	@pip install --user -e .
+	@echo "✅ Package installed in editable mode to user environment"
+	@echo "   If 'gh-pulls-summary' command is not found, ensure ~/.local/bin is in your PATH"
 
 clean: ## Remove temporary and backup files
 	# Python caches

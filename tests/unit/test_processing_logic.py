@@ -84,6 +84,7 @@ class TestProcessingLogic(unittest.TestCase):
                 "reviews": 2,
                 "approvals": 1,
                 "changes": 0,
+                "rank": "",
             }
         ]
         self.assertEqual(result, expected_result)
@@ -132,6 +133,7 @@ class TestProcessingLogic(unittest.TestCase):
                 "reviews": 0,
                 "approvals": 0,
                 "changes": 0,
+                "rank": "",
             }
         ]
         self.assertEqual(result, expected_result)
@@ -197,9 +199,15 @@ class TestProcessingLogic(unittest.TestCase):
 
 
 class TestGenerateMarkdownOutput(unittest.TestCase):
+    @patch("gh_pulls_summary.main.os.getenv")
     @patch("gh_pulls_summary.main.fetch_and_process_pull_requests")
-    def test_generate_markdown_output(self, mock_fetch_and_process_pull_requests):
+    def test_generate_markdown_output(
+        self, mock_fetch_and_process_pull_requests, mock_getenv
+    ):
         """Test the generate_markdown_output function."""
+        # Mock getenv to return None for GITHUB_TOKEN
+        mock_getenv.return_value = None
+
         # Mock arguments
         args = MagicMock(
             owner="owner",
@@ -210,6 +218,11 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             pr_number=None,
             url_from_pr_content=None,
             sort_column="date",
+            include_rank=False,
+            jira_issue_pattern=r"(ANSTRAT-\d+)",
+            jira_url=None,
+            jira_token=None,
+            github_token=None,
         )
 
         # Mock pull request data
@@ -240,7 +253,16 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
 
         # Verify that fetch_and_process_pull_requests was called with the correct arguments
         mock_fetch_and_process_pull_requests.assert_called_once_with(
-            "owner", "repo", None, None, None, None, None
+            "owner",
+            "repo",
+            None,
+            None,
+            None,
+            None,
+            None,
+            jira_client=None,
+            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            github_token=None,
         )
 
     @patch("gh_pulls_summary.main.fetch_and_process_pull_requests")
@@ -256,6 +278,12 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             url_from_pr_content = None
             column_title = ["date=Ready Date", "approvals=Total Approvals"]
             sort_column = "date"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            github_token = None
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
 
         mock_fetch.return_value = [
             {
@@ -295,6 +323,12 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             url_from_pr_content = None
             column_title = None
             sort_column = "title"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            github_token = None
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
 
         mock_fetch.return_value = [
             {

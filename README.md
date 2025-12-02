@@ -164,6 +164,7 @@ gh-pulls-summary --owner microsoft --repo vscode
 
 - `--owner`: Repository owner (defaults to current git config)
 - `--repo`: Repository name (defaults to current git config)
+- `--github-token`: GitHub personal access token (or `GITHUB_TOKEN` env var)
 - `--pr-number`: Query a single PR by number
 - `--draft-filter`: Filter by draft status (`only-drafts` or `no-drafts`)
 - `--file-include`: Regex pattern to include PRs by changed files (repeatable)
@@ -171,8 +172,14 @@ gh-pulls-summary --owner microsoft --repo vscode
 - `--url-from-pr-content`: Regex to extract URLs from PR diffs
 - `--output-markdown`: Write output to file
 - `--column-title`: Override column titles (format: `COLUMN=TITLE`)
-- `--sort-column`: Sort by column (`date`, `title`, `author`, `changes`, `approvals`, `urls`)
+- `--sort-column`: Sort by column (`date`, `title`, `author`, `changes`, `approvals`, `urls`, `rank`)
 - `--debug`: Enable debug logging
+
+**JIRA Integration Options:**
+- `--jira-url`: JIRA instance base URL (or `JIRA_BASE_URL` env var)
+- `--jira-token`: JIRA API token (or `JIRA_TOKEN` env var)
+- `--include-rank`: Add JIRA rank column to output
+- `--jira-issue-pattern`: Regex to extract issue keys (default: `(ANSTRAT-\d+)`)
 
 ### Examples
 
@@ -195,7 +202,80 @@ gh-pulls-summary --owner myorg --repo myrepo \
 gh-pulls-summary --owner myorg --repo myrepo \
   --file-include '.*\.py$' \
   --file-exclude 'test_.*\.py$'
+
+# JIRA integration - extract issue keys from files and show rank
+export JIRA_BASE_URL="https://issues.redhat.com"
+export JIRA_TOKEN="your_token"
+
+gh-pulls-summary --owner myorg --repo myrepo \
+  --file-include 'path/to/proposals/' \
+  --jira-issue-pattern '(ANSTRAT-\d+)' \
+  --include-rank \
+  --sort-column rank
 ```
+
+---
+
+## 🎫 JIRA Integration
+
+The tool can optionally fetch JIRA issue metadata and display rank information in the output.
+
+### Setup
+
+Set JIRA credentials via environment variables or command-line arguments:
+
+```bash
+# Environment variables (recommended)
+export JIRA_BASE_URL="https://issues.redhat.com"
+export JIRA_TOKEN="your_api_token"
+
+# Or use command-line arguments
+gh-pulls-summary --jira-url https://issues.redhat.com --jira-token your_token ...
+```
+
+### Usage
+
+Enable rank column with `--include-rank`:
+
+```bash
+gh-pulls-summary --owner myorg --repo myrepo \
+  --file-include 'path/to/proposals/' \
+  --jira-issue-pattern '(ANSTRAT-\d+)' \
+  --include-rank \
+  --sort-column rank
+```
+
+### How It Works
+
+1. **Extracts JIRA issue keys from PR files:**
+   - First checks PR metadata table (first 50 lines) for `Feature / Initiative` row (case-insensitive)
+   - Extracts **all** matching issues from the metadata row (not just first match)
+   - Falls back to searching full content of files matching `--file-include` patterns
+   - Uses `--jira-issue-pattern` regex to extract issue keys (supports multiple patterns)
+2. **Fetches metadata** for each issue (requires valid JIRA credentials)
+3. **Filters issues** by:
+   - Issue type: Only Feature and Initiative
+   - Status: Only New, Backlog, In Progress, or Refinement (excludes released/closed issues)
+4. **Selects highest priority** (lowest lexicographic rank) if multiple issues match
+5. **Displays rank** in RANK column with issue key appended (e.g., `0_i00ywg:9 ANSTRAT-1579`)
+
+### Requirements
+
+- **Required when `--include-rank` is used:**
+  - Valid JIRA base URL
+  - Valid JIRA API token (Bearer token)
+- Tool will exit with error if rank is requested but JIRA is not properly configured
+
+### Notes
+
+- **Rank format**: `<rank_value> <issue_key>` (e.g., `0_i00ywg:9 ANSTRAT-1579`)
+- **Rank sorting**: Lexicographically sorted (lower = higher priority)
+- **Pipe replacement**: Pipe characters in rank values are replaced with underscores for markdown compatibility
+- **Type filtering**: Only Feature and Initiative issue types are included
+- **Status filtering**: Only issues with status New, Backlog, In Progress, or Refinement are included
+- **File content search**: Searches full content of files matching `--file-include` patterns (not just PR diff)
+- **Metadata priority**: PR metadata table (first 50 lines) takes priority over file content search
+- **Error handling**: Individual issue fetch failures are logged but don't stop processing
 
 ---
 
@@ -215,17 +295,20 @@ Requires a GitHub Personal Access Token:
    - Check the `repo` scope
    - See [GitHub documentation](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
 
-2. **Set the Token**:
+2. **Provide the Token** (choose one method):
+   
+   **Option A: Command-line argument (recommended for secret-tool usage)**:
    ```bash
-   export GITHUB_TOKEN=<your_personal_access_token>
+   gh-pulls-summary --owner myorg --repo private-repo --github-token <your_token>
    ```
-
-3. **Run the Tool**:
+   
+   **Option B: Environment variable**:
    ```bash
+   export GITHUB_TOKEN=<your_token>
    gh-pulls-summary --owner myorg --repo private-repo
    ```
 
-With authentication, you get **5,000 requests/hour**.
+With authentication, you get **5,000 requests/hour** (vs 60 without).
 
 ### Secure Token Management
 

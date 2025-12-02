@@ -13,19 +13,31 @@ from typing import Any, cast
 import argcomplete
 import requests
 
+from gh_pulls_summary.jira_client import JiraClient, JiraClientError
+
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
 
-# Optional GitHub token
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # Set this in your environment variables
 
-HEADERS = {
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-}
+def get_github_headers(token: str | None = None) -> dict:
+    """
+    Get GitHub API headers, optionally with authentication.
 
-if GITHUB_TOKEN:  # pragma: no cover
-    HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    Args:
+        token: GitHub personal access token (optional)
+
+    Returns:
+        Dictionary of headers for GitHub API requests
+    """
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    return headers
 
 
 # Custom Exception Classes
@@ -118,6 +130,11 @@ def parse_arguments():
         help="The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.",
     )
     parser.add_argument(
+        "--github-token",
+        type=str,
+        help="GitHub personal access token for authentication. Can also be set via GITHUB_TOKEN environment variable. Increases rate limit from 60 to 5000 requests/hour.",
+    )
+    parser.add_argument(
         "--pr-number", type=int, help="Specify a single pull request number to query."
     )
     parser.add_argument(
@@ -159,7 +176,33 @@ def parse_arguments():
         "--sort-column",
         type=str,
         default="date",
-        help="Specify which output column to sort by. Valid values: date, title, author, changes, approvals, urls. Default is 'date'.",
+        help="Specify which output column to sort by. Valid values: date, title, author, changes, approvals, urls, rank. Default is 'date'.",
+    )
+    parser.add_argument(
+        "--jira-url",
+        type=str,
+        help="JIRA instance base URL (e.g., 'https://issues.redhat.com'). Can also be set via JIRA_BASE_URL environment variable.",
+    )
+    parser.add_argument(
+        "--jira-token",
+        type=str,
+        help="JIRA API token for authentication. Can also be set via JIRA_TOKEN environment variable.",
+    )
+    parser.add_argument(
+        "--jira-rank-field",
+        type=str,
+        help="Explicit JIRA Rank field ID (e.g., 'customfield_12311940'). If not provided, will attempt automatic discovery.",
+    )
+    parser.add_argument(
+        "--include-rank",
+        action="store_true",
+        help="Include JIRA rank column in output. Requires JIRA configuration (--jira-url or JIRA_BASE_URL). Only includes ANSTRAT issues of type Feature and Initiative.",
+    )
+    parser.add_argument(
+        "--jira-issue-pattern",
+        type=str,
+        action="append",
+        help="Regex pattern to extract JIRA issue keys from file contents. Use parentheses to capture the issue key (e.g., '(ANSTRAT-\\d+)'). Can be specified multiple times to use multiple patterns. If not specified, defaults to '(ANSTRAT-\\d+)'.",
     )
 
     # Enable tab completion
@@ -180,15 +223,27 @@ def configure_logging(debug):
     )
 
 
-def github_api_request(endpoint, params=None, use_paging=True, max_retries=3):
+def github_api_request(
+    endpoint, params=None, use_paging=True, max_retries=3, headers=None
+):
     """
     Makes a GitHub API request and optionally handles pagination.
     Returns all results across all pages if pagination is enabled.
     Returns None if no results are found or an error occurs.
     Automatically handles rate limiting by waiting and retrying.
+
+    Args:
+        endpoint: GitHub API endpoint path
+        params: Query parameters for the request
+        use_paging: Whether to handle pagination automatically
+        max_retries: Maximum number of retries for rate limiting
+        headers: HTTP headers to use for the request
     """
     if params is None:
         params = {}
+
+    if headers is None:
+        headers = get_github_headers()
 
     all_results = []
     page = 1
@@ -204,7 +259,7 @@ def github_api_request(endpoint, params=None, use_paging=True, max_retries=3):
         retry_count = 0
         while retry_count <= max_retries:
             try:
-                response = requests.get(url, headers=HEADERS, params=params)
+                response = requests.get(url, headers=headers, params=params)
             except requests.exceptions.ConnectionError as e:
                 raise NetworkError(
                     f"Network connection failed. Please check your internet connection and try again. Details: {e}"
@@ -230,7 +285,7 @@ def github_api_request(endpoint, params=None, use_paging=True, max_retries=3):
                         f"GitHub API rate limit exceeded after {max_retries} retries. "
                         f"Rate limit will reset at {reset_time}. "
                         f"Consider using a GitHub token to increase your rate limit (5000 requests/hour vs 60 requests/hour). "
-                        f"Set the GITHUB_TOKEN environment variable with a personal access token."
+                        f"Use --github-token or set GITHUB_TOKEN environment variable with a personal access token."
                     )
 
                 # Parse reset time and calculate wait duration
@@ -262,7 +317,7 @@ def github_api_request(endpoint, params=None, use_paging=True, max_retries=3):
 
         if response.status_code == 401:
             raise GitHubAPIError(
-                "GitHub API authentication failed. Please check your GITHUB_TOKEN if set. "
+                "GitHub API authentication failed. Please check your --github-token or GITHUB_TOKEN if set. "
                 "You may need to generate a new personal access token from GitHub Settings.",
                 status_code=401,
                 response_text=response.text,
@@ -317,53 +372,58 @@ def github_api_request(endpoint, params=None, use_paging=True, max_retries=3):
     return all_results
 
 
-def fetch_pull_requests(owner, repo):
+def fetch_pull_requests(owner, repo, github_token=None):
     """
     Fetches all open pull requests for the specified repository.
     """
     endpoint = f"/repos/{owner}/{repo}/pulls"
     params = {"state": "open"}
+    headers = get_github_headers(github_token)
     logging.debug(f"Fetching pull requests for {owner}/{repo}")
-    return github_api_request(endpoint, params)
+    return github_api_request(endpoint, params, headers=headers)
 
 
-def fetch_single_pull_request(owner, repo, pr_number):
+def fetch_single_pull_request(owner, repo, pr_number, github_token=None):
     """
     Fetches a single pull request by its number.
     """
     endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}"
+    headers = get_github_headers(github_token)
     logging.debug(f"Fetching single pull request #{pr_number} for {owner}/{repo}")
-    return github_api_request(endpoint, use_paging=False)
+    return github_api_request(endpoint, use_paging=False, headers=headers)
 
 
-def fetch_issue_events(owner, repo, pr_number):
+def fetch_issue_events(owner, repo, pr_number, github_token=None):
     """
     Fetches all issue events for a specific pull request.
     """
     endpoint = f"/repos/{owner}/{repo}/issues/{pr_number}/events"
+    headers = get_github_headers(github_token)
     logging.debug(f"Fetching issue events for PR #{pr_number}")
-    return github_api_request(endpoint)
+    return github_api_request(endpoint, headers=headers)
 
 
-def fetch_reviews(owner, repo, pr_number):
+def fetch_reviews(owner, repo, pr_number, github_token=None):
     """
     Fetches all reviews for a specific pull request.
     """
     endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+    headers = get_github_headers(github_token)
     logging.debug(f"Fetching reviews for PR #{pr_number}")
-    return github_api_request(endpoint)
+    return github_api_request(endpoint, headers=headers)
 
 
-def fetch_user_details(username):
+def fetch_user_details(username, github_token=None):
     """
     Fetches details for a specific GitHub user.
     Returns None if user is not found (404 error).
     """
     url = f"{GITHUB_API_BASE}/users/{username}"
+    headers = get_github_headers(github_token)
     logging.debug(f"Fetching user details for {username}")
 
     try:
-        response = requests.get(url, headers=HEADERS)
+        response = requests.get(url, headers=headers)
     except requests.exceptions.ConnectionError:
         raise NetworkError(
             f"Network connection failed while fetching user details for {username}. Please check your internet connection and try again."
@@ -408,18 +468,316 @@ def fetch_user_details(username):
         )
 
 
-def fetch_pr_files(owner, repo, pr_number):
+def fetch_pr_files(owner, repo, pr_number, github_token=None):
     """
     Fetches the list of files changed in a specific pull request.
     """
     endpoint = f"/repos/{owner}/{repo}/pulls/{pr_number}/files"
+    headers = get_github_headers(github_token)
     logging.debug(f"Fetching files for PR #{pr_number}")
-    files = github_api_request(endpoint, use_paging=True)
+    files = github_api_request(endpoint, use_paging=True, headers=headers)
     logging.debug(f"Files fetched for PR #{pr_number}: {files}")
     return files
 
 
-def fetch_pr_diff(owner, repo, pr_number):
+def fetch_file_content(owner, repo, file_path, ref, github_token=None):
+    """
+    Fetches the raw content of a file from GitHub at a specific ref (branch/commit).
+
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        file_path: Path to the file in the repository
+        ref: Branch name or commit SHA
+        github_token: GitHub authentication token
+
+    Returns:
+        File content as string, or None if fetch fails
+    """
+    endpoint = f"/repos/{owner}/{repo}/contents/{file_path}"
+    headers = get_github_headers(github_token)
+    headers["Accept"] = "application/vnd.github.raw"
+    params = {"ref": ref}
+
+    logging.debug(f"Fetching content for {file_path} at ref {ref}")
+
+    try:
+        url = f"{GITHUB_API_BASE}{endpoint}"
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+
+        if response.status_code == 200:
+            return response.text
+        if response.status_code == 404:
+            logging.warning(f"File not found: {file_path} at ref {ref}")
+            return None
+        if response.status_code == 403:
+            logging.warning(f"Access denied or rate limit when fetching {file_path}")
+            return None
+        logging.warning(f"Failed to fetch {file_path}: status {response.status_code}")
+        return None
+
+    except Exception as e:
+        logging.warning(f"Error fetching file content for {file_path}: {e}")
+        return None
+
+
+def create_jira_client(args) -> JiraClient | None:
+    """
+    Create a JIRA client if JIRA configuration is provided.
+
+    Args:
+        args: Command line arguments
+
+    Returns:
+        JiraClient instance or None if JIRA is not configured
+
+    Raises:
+        ValueError: If --include-rank is specified but JIRA configuration is invalid
+        JiraClientError: If --include-rank is specified but JIRA connection fails
+    """
+    if not args.include_rank:
+        return None
+
+    # If rank is requested, JIRA must be properly configured
+    try:
+        client = JiraClient(
+            base_url=args.jira_url,
+            token=args.jira_token,
+            rank_field_id=args.jira_rank_field,
+        )
+        # Test the connection
+        client.test_connection()
+        logging.info("JIRA client initialized successfully")
+        return client
+    except ValueError as e:
+        raise ValueError(
+            f"JIRA configuration error: {e}\n"
+            f"Rank column requested (--include-rank) but JIRA is not properly configured."
+        )
+    except JiraClientError as e:
+        raise JiraClientError(
+            f"JIRA connection failed: {e}\n"
+            f"Rank column requested (--include-rank) but cannot connect to JIRA."
+        )
+
+
+def extract_jira_issue_keys(url_dict: dict, pattern: str) -> list[str]:
+    """
+    Extract JIRA issue keys from URLs dictionary.
+
+    Args:
+        url_dict: Dictionary of URL text to URL
+        pattern: Regex pattern to match issue keys
+
+    Returns:
+        List of unique issue keys found
+    """
+    if not url_dict:
+        return []
+
+    issue_keys = set()
+    try:
+        regex = re.compile(pattern)
+        for url in url_dict.values():
+            matches = regex.findall(url)
+            issue_keys.update(matches)
+    except re.error as e:
+        logging.warning(f"Invalid JIRA issue pattern: {e}")
+        return []
+
+    return sorted(issue_keys)
+
+
+def extract_primary_jira_from_metadata(pr_body: str, patterns: list[str]) -> list[str]:
+    """
+    Extract primary JIRA issues from PR metadata table.
+
+    Looks for a markdown table in the first 50 lines with a row like:
+    | **Feature / Initiative** | [ANSTRAT-1586](url) |
+
+    Args:
+        pr_body: The PR body/description text
+        patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)"])
+
+    Returns:
+        List of JIRA issue keys found in metadata table, or empty list if none found
+    """
+    if not pr_body or not patterns:
+        return []
+
+    # Look only at first 50 lines
+    lines = pr_body.split("\n")[:50]
+
+    # Look for the "Feature / Initiative" row in a markdown table (case-insensitive)
+    feature_initiative_pattern = re.compile(r"feature\s*/?\s*initiative", re.IGNORECASE)
+
+    for line in lines:
+        # Check if this line contains the Feature/Initiative marker
+        if feature_initiative_pattern.search(line):
+            # Collect all unique matches from all patterns
+            all_matches = []
+            for pattern in patterns:
+                try:
+                    regex = re.compile(pattern)
+                    matches = regex.findall(line)
+                    if matches:
+                        all_matches.extend([str(m) for m in matches])
+                except re.error as e:
+                    logging.warning(f"Invalid JIRA issue pattern '{pattern}': {e}")
+                    continue
+
+            if all_matches:
+                # Remove duplicates while preserving order
+                unique_issues = list(dict.fromkeys(all_matches))
+                logging.info(
+                    f"Found primary JIRA issues in metadata table: {', '.join(unique_issues)}"
+                )
+                return unique_issues
+
+    logging.debug("No primary JIRA issues found in PR metadata table")
+    return []
+
+
+def extract_jira_from_file_contents(
+    file_contents: list[str], patterns: list[str]
+) -> list[str]:
+    """
+    Extract JIRA issue keys from full file contents using multiple patterns.
+
+    Searches the complete content of all files (not limited to first 50 lines).
+    Each pattern should contain a single capture group that extracts the issue identifier.
+
+    Args:
+        file_contents: List of file content strings to search (full file contents)
+        patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)", r"(OTHERJIRA-\\d+)"])
+
+    Returns:
+        Sorted list of unique JIRA issue keys found across all patterns
+    """
+    if not file_contents or not patterns:
+        return []
+
+    issue_keys: set[str] = set()
+
+    for pattern in patterns:
+        try:
+            regex = re.compile(pattern)
+            for content in file_contents:
+                if content:
+                    matches = regex.findall(content)
+                    # Add all matches to the set (duplicates automatically filtered)
+                    issue_keys.update(str(match) for match in matches)
+        except re.error as e:
+            logging.warning(f"Invalid JIRA issue pattern '{pattern}': {e}")
+            continue
+
+    return sorted(issue_keys)
+
+
+def get_rank_for_pr(
+    jira_client: JiraClient | None,
+    file_contents: list[str],
+    issue_patterns: list[str],
+    pr_body: str | None = None,
+) -> str | None:
+    """
+    Get the highest priority rank for a PR based on its JIRA issues.
+
+    Extraction strategy:
+    1. First checks PR metadata table (first 50 lines, "Feature / Initiative" row)
+    2. Falls back to searching full file contents if metadata extraction fails
+
+    All supplied patterns are tried. File contents are searched completely (not limited to 50 lines).
+
+    Filtering rules:
+    - Only include Feature and Initiative issue types
+    - Only include issues with status: New, Backlog, In Progress, or Refinement
+    - For multiple issues, select the highest priority (lowest lexicographic rank)
+    - Replace pipe characters with underscores for markdown safety
+
+    Args:
+        jira_client: JIRA client instance
+        file_contents: List of file content strings to search for JIRA issues (full contents)
+        issue_patterns: List of regex patterns to extract issue keys (each pattern should have one capture group)
+        pr_body: PR body/description text (optional)
+
+    Returns:
+        Rank value as string (with pipes replaced by underscores and issue key appended), or None
+    """
+    if not jira_client or not issue_patterns:
+        return None
+
+    # First, try to extract primary issues from PR metadata table (first 50 lines only)
+    issue_keys = []
+    if pr_body:
+        primary_issues = extract_primary_jira_from_metadata(pr_body, issue_patterns)
+        if primary_issues:
+            issue_keys = primary_issues
+            logging.debug(
+                f"Using primary JIRA issues from metadata: {', '.join(primary_issues)}"
+            )
+
+    # Fall back to extracting from full file contents if no metadata found
+    if not issue_keys:
+        issue_keys = extract_jira_from_file_contents(file_contents, issue_patterns)
+        if issue_keys:
+            logging.debug(f"Using JIRA issues from file contents: {issue_keys}")
+
+    if not issue_keys:
+        return None
+
+    # Fetch metadata for all issues
+    try:
+        metadata = jira_client.get_issues_metadata(issue_keys)
+    except JiraClientError as e:
+        logging.warning(f"Failed to fetch JIRA metadata: {e}")
+        return None
+
+    if not metadata:
+        return None
+
+    # Allowed statuses for ranking
+    allowed_statuses = {"New", "Backlog", "In Progress", "Refinement"}
+
+    # Filter by issue type, status, and extract ranks with issue keys
+    valid_rank_tuples = []
+    for issue_key, issue_data in metadata.items():
+        issue_type = jira_client.get_issue_type(issue_data)
+        issue_status = jira_client.get_issue_status(issue_data)
+        rank_value = jira_client.extract_rank_value(issue_data)
+
+        logging.debug(
+            f"{issue_key}: type={issue_type}, status={issue_status}, rank={rank_value}"
+        )
+
+        # Only include Feature and Initiative with allowed statuses
+        if (
+            issue_type in ["Feature", "Initiative"]
+            and issue_status in allowed_statuses
+            and rank_value
+        ):
+            valid_rank_tuples.append((rank_value, issue_key))
+
+    if not valid_rank_tuples:
+        return None
+
+    # Select highest priority (lowest lexicographic value)
+    # Empty ranks should be treated as lowest priority
+    def rank_sort_key(rank_tuple):
+        rank_value = rank_tuple[0]
+        if not rank_value or rank_value == "":
+            return "z" * 100  # Push empty to end
+        return rank_value
+
+    valid_rank_tuples.sort(key=rank_sort_key)
+    highest_priority_rank, issue_key = valid_rank_tuples[0]
+
+    # Replace pipe characters with underscores for markdown safety
+    # Append issue key for transparency
+    return f"{highest_priority_rank.replace('|', '_')} {issue_key}"
+
+
+def fetch_pr_diff(owner, repo, pr_number, github_token=None):
     """
     Fetches the diff for a specific pull request using the GitHub API.
     Returns the diff as a string.
@@ -428,7 +786,7 @@ def fetch_pr_diff(owner, repo, pr_number):
         return None
 
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
-    headers = HEADERS.copy()
+    headers = get_github_headers(github_token)
     headers["Accept"] = "application/vnd.github.v3.diff"
 
     try:
@@ -481,11 +839,17 @@ def fetch_and_process_pull_requests(
     file_exclude=None,
     pr_number=None,
     url_from_pr_content=None,
+    jira_client=None,
+    jira_issue_patterns=None,
+    github_token=None,
 ):
     """
     Fetches and processes pull requests for the specified repository.
     If a single PR number is specified, only that PR is fetched and processed.
     Returns a list of processed pull request data.
+
+    Args:
+        jira_issue_patterns: List of regex patterns to extract JIRA issue keys from file contents
     """
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
     pull_requests = []
@@ -493,14 +857,14 @@ def fetch_and_process_pull_requests(
 
     if pr_number:
         # Fetch a single PR
-        pr = fetch_single_pull_request(owner, repo, pr_number)
+        pr = fetch_single_pull_request(owner, repo, pr_number, github_token)
         if pr is None:
             logging.error(f"Failed to fetch PR #{pr_number}")
             return []
         prs = [pr]  # Wrap in a list for consistent processing
     else:
         # Fetch all PRs
-        prs = fetch_pull_requests(owner, repo)
+        prs = fetch_pull_requests(owner, repo, github_token)
         if prs is None:
             logging.error("Failed to fetch pull requests")
             return []
@@ -533,7 +897,7 @@ def fetch_and_process_pull_requests(
         # Apply file filters if specified
         if file_include or file_exclude:
             # Fetch files changed in the PR
-            files = fetch_pr_files(owner, repo, pr_number)
+            files = fetch_pr_files(owner, repo, pr_number, github_token)
             if files is None:
                 logging.warning(
                     f"Failed to fetch files for PR #{pr_number}. File filters will be ignored for this PR. This may be due to network issues or API rate limits."
@@ -569,7 +933,7 @@ def fetch_and_process_pull_requests(
 
         # Determine when the PR was last marked as ready for review
         pr_ready_date = None
-        events = fetch_issue_events(owner, repo, pr_number)
+        events = fetch_issue_events(owner, repo, pr_number, github_token)
         if events is not None:
             for event in events:
                 if event["event"] == "ready_for_review":
@@ -586,7 +950,7 @@ def fetch_and_process_pull_requests(
         pr_ready_date = pr_ready_date.split("T")[0]
 
         # Fetch author details
-        author_details = fetch_user_details(pr_author)
+        author_details = fetch_user_details(pr_author, github_token)
         if author_details is not None:
             author_details = cast(
                 dict[str, Any], author_details
@@ -603,7 +967,7 @@ def fetch_and_process_pull_requests(
             pr_author_url = f"https://github.com/{pr_author}"
 
         # Fetch reviews and approvals
-        reviews = fetch_reviews(owner, repo, pr_number)
+        reviews = fetch_reviews(owner, repo, pr_number, github_token)
         if reviews is None:
             logging.warning(
                 f"Failed to fetch reviews for PR #{pr_number}. Review counts will be set to 0. This may be due to network issues or API rate limits."
@@ -644,7 +1008,7 @@ def fetch_and_process_pull_requests(
         # Optionally extract all unique URLs from the PR diff (added lines only), sorted by display text
         pr_body_urls_dict = {}
         if url_regex_compiled:
-            diff = fetch_pr_diff(owner, repo, pr_number)
+            diff = fetch_pr_diff(owner, repo, pr_number, github_token)
             if diff is not None:
                 for line in diff.splitlines():
                     if line.startswith("+") and not line.startswith("+++"):
@@ -667,6 +1031,47 @@ def fetch_and_process_pull_requests(
                     f"Failed to fetch diff for PR #{pr_number}. URL extraction will be skipped for this PR. This may be due to network issues or API rate limits."
                 )
 
+        # Get rank if JIRA client is configured
+        pr_rank = None
+        if jira_client and jira_issue_patterns:
+            pr_body = pr.get("body", "")
+            file_contents_list = []
+
+            # Fetch full content of files matching file_include patterns
+            if file_include:
+                # Get ref (commit SHA) from the PR
+                pr_ref = pr.get("head", {}).get("sha")
+                if pr_ref:
+                    # Re-use files list if already fetched, otherwise fetch
+                    if "files" not in locals() or files is None:
+                        files = fetch_pr_files(owner, repo, pr_number, github_token)
+                        if files is None:
+                            files = []
+
+                    # Filter files to only those matching file_include
+                    matching_files = []
+                    for file in files:
+                        file_path = file.get("filename", "")
+                        if any(pattern.search(file_path) for pattern in file_include):
+                            matching_files.append(file_path)
+
+                    # Fetch content for each matching file
+                    for file_path in matching_files:
+                        content = fetch_file_content(
+                            owner, repo, file_path, pr_ref, github_token
+                        )
+                        if content:
+                            file_contents_list.append(content)
+                            logging.debug(
+                                f"Fetched content for {file_path} ({len(content)} chars)"
+                            )
+
+            pr_rank = get_rank_for_pr(
+                jira_client, file_contents_list, jira_issue_patterns, pr_body
+            )
+            if pr_rank:
+                logging.debug(f"PR #{pr_number} rank: {pr_rank}")
+
         pull_requests.append(
             {
                 "date": pr_ready_date,
@@ -679,6 +1084,7 @@ def fetch_and_process_pull_requests(
                 "approvals": pr_approvals,
                 "changes": pr_changes,
                 "pr_body_urls_dict": pr_body_urls_dict,
+                "rank": pr_rank or "",
             }
         )
 
@@ -699,6 +1105,7 @@ def parse_column_titles(args):
         "changes": "Change Requested",
         "approvals": "Approvals",
         "urls": "URLs",
+        "rank": "RANK",
     }
     custom_titles = {}
     if hasattr(args, "column_title") and args.column_title:
@@ -720,7 +1127,15 @@ def validate_sort_column(sort_column):
     Validates the sort column and returns it in lowercase.
     Raises ValidationError if invalid.
     """
-    allowed_columns = ["date", "title", "author", "changes", "approvals", "urls"]
+    allowed_columns = [
+        "date",
+        "title",
+        "author",
+        "changes",
+        "approvals",
+        "urls",
+        "rank",
+    ]
     sort_column = sort_column.lower()
     if sort_column not in allowed_columns:
         raise ValidationError(
@@ -731,27 +1146,31 @@ def validate_sort_column(sort_column):
     return sort_column
 
 
-def create_markdown_table_header(titles, url_column):
+def create_markdown_table_header(titles, url_column, rank_column):
     """
     Creates the markdown table header and separator rows.
     Returns a tuple of (header_row, separator_row).
     """
     header = f"| {titles['date']} | {titles['title']} | {titles['author']} | {titles['changes']} | {titles['approvals']} |"
+    separator = "| --- | --- | --- | --- | --- |"
+
     if url_column:
         header = header + f" {titles['urls']} |"
+        separator = separator + " --- |"
 
-    separator = "| --- | --- | --- | --- | --- |"
-    if url_column:
+    if rank_column:
+        header = header + f" {titles['rank']} |"
         separator = separator + " --- |"
 
     return header, separator
 
 
-def create_markdown_table_row(pr, url_column):
+def create_markdown_table_row(pr, url_column, rank_column):
     """
     Creates a single markdown table row for a pull request.
     """
     row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
+
     if url_column:
         if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
             url_links = " ".join(
@@ -760,6 +1179,11 @@ def create_markdown_table_row(pr, url_column):
             row = row + f" {url_links} |"
         else:
             row = row + " |"
+
+    if rank_column:
+        rank_value = pr.get("rank", "")
+        row = row + f" {rank_value} |"
+
     return row
 
 
@@ -796,6 +1220,24 @@ def generate_markdown_output(args):
                     f"Please provide a valid regular expression pattern."
                 )
 
+    # Create JIRA client if rank is requested
+    # Note: create_jira_client will raise an exception if --include-rank is specified
+    # but JIRA is not properly configured, causing execution to fail
+    jira_client = create_jira_client(args)
+
+    # Get GitHub token from args or environment
+    github_token = args.github_token or os.getenv("GITHUB_TOKEN")
+
+    # Handle JIRA issue patterns - ensure it's always a list
+    jira_issue_patterns = args.jira_issue_pattern
+    if not jira_issue_patterns:
+        # No patterns specified, use default
+        jira_issue_patterns = [r"(ANSTRAT-\d+)"]
+    elif isinstance(jira_issue_patterns, str):
+        # Single pattern as string (e.g., from tests), convert to list
+        jira_issue_patterns = [jira_issue_patterns]
+    # else: already a list from argparse action="append"
+
     # Fetch and process pull requests
     pull_requests = fetch_and_process_pull_requests(
         args.owner,
@@ -805,10 +1247,14 @@ def generate_markdown_output(args):
         file_exclude,
         args.pr_number,
         args.url_from_pr_content,
+        jira_client=jira_client,
+        jira_issue_patterns=jira_issue_patterns,
+        github_token=github_token,
     )
 
-    # Determine if we need to add a URL column
+    # Determine if we need to add URL and rank columns
     url_column = bool(args.url_from_pr_content)
+    rank_column = bool(args.include_rank)
 
     # Handle custom column titles
     titles = parse_column_titles(args)
@@ -824,7 +1270,7 @@ def generate_markdown_output(args):
 
     # Generate Markdown output
     output = []
-    header, separator = create_markdown_table_header(titles, url_column)
+    header, separator = create_markdown_table_header(titles, url_column, rank_column)
     output.append(header)
     output.append(separator)
 
@@ -837,13 +1283,19 @@ def generate_markdown_output(args):
                 if pr.get("pr_body_urls_dict")
                 else ""
             )
+        if key == "rank":
+            # Empty ranks should sort to the end
+            rank_value = pr.get("rank", "")
+            if not rank_value:
+                return "z" * 100
+            return rank_value
         return pr.get(key, "")
 
     sorted_prs = sorted(pull_requests, key=sort_key)
 
     # Add data rows
     for pr in sorted_prs:
-        row = create_markdown_table_row(pr, url_column)
+        row = create_markdown_table_row(pr, url_column, rank_column)
         output.append(row)
 
     return "\n".join(output)
@@ -866,13 +1318,14 @@ def generate_timestamp(current_time=None, generator_name=None, generator_url=Non
     return timestamp
 
 
-def get_authenticated_user_info():
+def get_authenticated_user_info(github_token=None):
     """
     Fetch the authenticated user's info from the GitHub API.
     Returns (name, html_url) or (None, None) if not available.
     """
+    headers = get_github_headers(github_token)
     try:
-        resp = requests.get("https://api.github.com/user", headers=HEADERS, timeout=5)
+        resp = requests.get("https://api.github.com/user", headers=headers, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
             name = data.get("name") or data.get("login")
@@ -911,6 +1364,9 @@ def main():
     except ValidationError as e:
         print(f"ERROR: Input validation failed. {e}", file=sys.stderr)
         sys.exit(1)
+    except JiraClientError as e:
+        print(f"ERROR: JIRA error. {e}", file=sys.stderr)
+        sys.exit(1)
     except RateLimitError as e:
         print(f"ERROR: GitHub API rate limit exceeded. {e}", file=sys.stderr)
         sys.exit(1)
@@ -924,8 +1380,11 @@ def main():
         print(f"ERROR: Network error. {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Get GitHub token from args or environment
+    github_token = args.github_token or os.getenv("GITHUB_TOKEN")
+
     # Determine user info using GitHub API /user if possible
-    name, url = get_authenticated_user_info()
+    name, url = get_authenticated_user_info(github_token)
 
     # Print timestamp and Markdown output, and capture their values
     timestamp_output = generate_timestamp(generator_name=name, generator_url=url)
@@ -977,6 +1436,9 @@ if __name__ == "__main__":  # pragma: no cover
         sys.exit(130)  # Standard exit code for SIGINT
     except ValidationError as e:
         print(f"ERROR: Input validation failed. {e}", file=sys.stderr)
+        sys.exit(1)
+    except JiraClientError as e:
+        print(f"ERROR: JIRA error. {e}", file=sys.stderr)
         sys.exit(1)
     except RateLimitError as e:
         print(f"ERROR: GitHub API rate limit exceeded. {e}", file=sys.stderr)

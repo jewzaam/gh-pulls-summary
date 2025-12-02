@@ -11,8 +11,6 @@ import os
 import pytest
 import requests
 
-from gh_pulls_summary.main import GITHUB_TOKEN
-
 
 def pytest_configure(config):
     """
@@ -35,7 +33,8 @@ def check_rate_limit():
         pytest.skip("Integration tests not enabled. Set RUN_INTEGRATION_TESTS=1")
 
     # Require GITHUB_TOKEN for integration tests
-    if not GITHUB_TOKEN:
+    github_token = os.getenv("GITHUB_TOKEN")
+    if not github_token:
         pytest.fail(
             "❌ GITHUB_TOKEN is required for integration tests.\n"
             "Set the GITHUB_TOKEN environment variable with a GitHub personal access token.\n"
@@ -49,7 +48,7 @@ def check_rate_limit():
 
     # Verify the token works and check rate limit
     try:
-        headers = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
+        headers = {"Authorization": f"Bearer {github_token}"}
 
         response = requests.get(
             "https://api.github.com/rate_limit", headers=headers, timeout=10
@@ -88,8 +87,9 @@ def github_rate_limit_info():
     """
     try:
         headers = {}
-        if GITHUB_TOKEN:
-            headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+        github_token = os.getenv("GITHUB_TOKEN")
+        if github_token:
+            headers["Authorization"] = f"Bearer {github_token}"
 
         response = requests.get(
             "https://api.github.com/rate_limit", headers=headers, timeout=10
