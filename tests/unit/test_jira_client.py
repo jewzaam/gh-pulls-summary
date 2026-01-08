@@ -939,6 +939,335 @@ class TestJiraInclude(unittest.TestCase):
         self.assertEqual(len(pull_requests), 0)
 
 
+class TestJiraHierarchyTraversal(unittest.TestCase):
+    """Test cases for JIRA hierarchy traversal to find Feature/Initiative ancestors."""
+
+    @patch("gh_pulls_summary.main.fetch_user_details")
+    @patch("gh_pulls_summary.main.fetch_reviews")
+    @patch("gh_pulls_summary.main.fetch_issue_events")
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_rank_from_ancestor_when_pr_references_non_feature(
+        self,
+        mock_fetch_pull_requests,
+        mock_fetch_issue_events,
+        mock_fetch_reviews,
+        mock_fetch_user_details,
+    ):
+        """
+        Test that when a PR references a non-Feature/Initiative issue (e.g., SDP, Proposal, AAP),
+        the code traverses up the JIRA hierarchy to find the Feature or Initiative ancestor
+        and uses that for ranking.
+
+        Real-world example: PR #965 references AAP-60030, which rolls up to ANSTRAT-1780.
+        The rank should come from ANSTRAT-1780 (Feature), not fail because AAP-60030 is not
+        a Feature/Initiative.
+        """
+        from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        # Mock a single PR referencing AAP-60030
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 965,
+                "title": "Test PR with AAP reference",
+                "user": {"login": "testuser"},
+                "draft": False,
+                "created_at": "2025-01-01T00:00:00Z",
+                "html_url": "https://github.com/owner/repo/pull/965",
+                "body": "| **Feature / Initiative** | [AAP-60030](https://issues.example.com/browse/AAP-60030) |",
+            }
+        ]
+
+        mock_fetch_issue_events.return_value = [
+            {"event": "ready_for_review", "created_at": "2025-01-02T00:00:00Z"}
+        ]
+        mock_fetch_reviews.return_value = []
+        mock_fetch_user_details.return_value = {
+            "name": "Test User",
+            "html_url": "https://github.com/testuser",
+        }
+
+        # Create mock JIRA client with hierarchy
+        jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
+
+        # Mock metadata for both AAP-60030 (non-Feature) and ANSTRAT-1780 (Feature ancestor)
+        jira_client.get_issues_metadata.return_value = {
+            "AAP-60030": {
+                "key": "AAP-60030",
+                "fields": {
+                    "summary": "AAP Story",
+                    "issuetype": {"name": "Story"},  # Not Feature or Initiative
+                    "status": {"name": "Backlog"},
+                    "customfield_12345": None,  # No rank on AAP issue
+                },
+                "_rank_field_id": "customfield_12345",
+            },
+            "ANSTRAT-1780": {
+                "key": "ANSTRAT-1780",
+                "fields": {
+                    "summary": "Feature ancestor",
+                    "issuetype": {"name": "Feature"},
+                    "status": {"name": "Backlog"},
+                    "customfield_12345": "0|i00xyz:a",
+                },
+                "_rank_field_id": "customfield_12345",
+            },
+        }
+
+        # Mock hierarchy traversal: AAP-60030 -> ANSTRAT-1780
+        def mock_get_ancestors_side_effect(issue_key, metadata_cache=None, max_depth=5):  # noqa: ARG001
+            if issue_key == "AAP-60030":
+                return [
+                    {
+                        "key": "ANSTRAT-1780",
+                        "fields": {
+                            "issuetype": {"name": "Feature"},
+                            "status": {"name": "Backlog"},
+                            "customfield_12345": "0|i00xyz:a",
+                        },
+                        "_rank_field_id": "customfield_12345",
+                    }
+                ]
+            return []
+
+        jira_client.get_ancestors = Mock(side_effect=mock_get_ancestors_side_effect)
+
+        # Mock the methods used by get_rank_for_pr
+        def mock_get_issue_type(issue_data):
+            return issue_data.get("fields", {}).get("issuetype", {}).get("name")
+
+        def mock_get_issue_status(issue_data):
+            return issue_data.get("fields", {}).get("status", {}).get("name")
+
+        def mock_extract_rank_value(issue_data):
+            return issue_data.get("fields", {}).get("customfield_12345")
+
+        jira_client.get_issue_type.side_effect = mock_get_issue_type
+        jira_client.get_issue_status.side_effect = mock_get_issue_status
+        jira_client.extract_rank_value.side_effect = mock_extract_rank_value
+
+        # Process PRs
+        pull_requests, _ = fetch_and_process_pull_requests(
+            "owner",
+            "repo",
+            jira_client=jira_client,
+            jira_issue_patterns=[r"(AAP-\d+)", r"(ANSTRAT-\d+)"],
+            github_token="test_token",
+        )
+
+        # Verify: should have one PR
+        self.assertEqual(len(pull_requests), 1)
+
+        # Verify: PR should have rank from ANSTRAT-1780 (the Feature ancestor)
+        pr = pull_requests[0]
+        self.assertIsNotNone(pr.get("rank"))
+        self.assertIn("ANSTRAT-1780", pr["rank"])
+        self.assertIn("0|i00xyz:a", pr["rank"].replace("_", "|"))
+
+        # Verify: get_ancestors was called for AAP-60030
+        jira_client.get_ancestors.assert_called()
+
+    @patch("gh_pulls_summary.main.fetch_user_details")
+    @patch("gh_pulls_summary.main.fetch_reviews")
+    @patch("gh_pulls_summary.main.fetch_issue_events")
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_hierarchy_traversal_stops_at_first_feature(
+        self,
+        mock_fetch_pull_requests,
+        mock_fetch_issue_events,
+        mock_fetch_reviews,
+        mock_fetch_user_details,
+    ):
+        """
+        Test that hierarchy traversal stops at the first Feature/Initiative found,
+        not traversing further up the chain.
+        """
+        from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        # Mock PR referencing a Story
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 100,
+                "title": "Test PR",
+                "user": {"login": "testuser"},
+                "draft": False,
+                "created_at": "2025-01-01T00:00:00Z",
+                "html_url": "https://github.com/owner/repo/pull/100",
+                "body": "| **Feature / Initiative** | [STORY-100](https://issues.example.com/browse/STORY-100) |",
+            }
+        ]
+
+        mock_fetch_issue_events.return_value = [
+            {"event": "ready_for_review", "created_at": "2025-01-02T00:00:00Z"}
+        ]
+        mock_fetch_reviews.return_value = []
+        mock_fetch_user_details.return_value = {
+            "name": "Test User",
+            "html_url": "https://github.com/testuser",
+        }
+
+        jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
+
+        # Hierarchy: STORY-100 (Story) -> FEATURE-200 (Feature) -> INITIATIVE-300 (Initiative)
+        jira_client.get_issues_metadata.return_value = {
+            "STORY-100": {
+                "key": "STORY-100",
+                "fields": {
+                    "summary": "Story",
+                    "issuetype": {"name": "Story"},
+                    "status": {"name": "Backlog"},
+                    "customfield_12345": None,
+                },
+                "_rank_field_id": "customfield_12345",
+            },
+        }
+
+        # Mock hierarchy: Story -> Feature -> Initiative
+        # Should stop at Feature (first match)
+        def mock_get_ancestors_side_effect(issue_key, metadata_cache=None, max_depth=5):  # noqa: ARG001
+            if issue_key == "STORY-100":
+                return [
+                    {
+                        "key": "FEATURE-200",
+                        "fields": {
+                            "issuetype": {"name": "Feature"},
+                            "status": {"name": "Backlog"},
+                            "customfield_12345": "0|i00aaa:a",
+                        },
+                        "_rank_field_id": "customfield_12345",
+                    },
+                    {
+                        "key": "INITIATIVE-300",
+                        "fields": {
+                            "issuetype": {"name": "Initiative"},
+                            "status": {"name": "Backlog"},
+                            "customfield_12345": "0|i00bbb:b",
+                        },
+                        "_rank_field_id": "customfield_12345",
+                    },
+                ]
+            return []
+
+        jira_client.get_ancestors = Mock(side_effect=mock_get_ancestors_side_effect)
+
+        def mock_get_issue_type(issue_data):
+            return issue_data.get("fields", {}).get("issuetype", {}).get("name")
+
+        def mock_get_issue_status(issue_data):
+            return issue_data.get("fields", {}).get("status", {}).get("name")
+
+        def mock_extract_rank_value(issue_data):
+            return issue_data.get("fields", {}).get("customfield_12345")
+
+        jira_client.get_issue_type.side_effect = mock_get_issue_type
+        jira_client.get_issue_status.side_effect = mock_get_issue_status
+        jira_client.extract_rank_value.side_effect = mock_extract_rank_value
+
+        pull_requests, _ = fetch_and_process_pull_requests(
+            "owner",
+            "repo",
+            jira_client=jira_client,
+            jira_issue_patterns=[r"(STORY-\d+)", r"(FEATURE-\d+)", r"(INITIATIVE-\d+)"],
+            github_token="test_token",
+        )
+
+        self.assertEqual(len(pull_requests), 1)
+        pr = pull_requests[0]
+
+        # Should use FEATURE-200 (first Feature/Initiative in hierarchy), not INITIATIVE-300
+        self.assertIsNotNone(pr.get("rank"))
+        self.assertIn("FEATURE-200", pr["rank"])
+        self.assertIn("0|i00aaa:a", pr["rank"].replace("_", "|"))
+
+    @patch("gh_pulls_summary.main.fetch_user_details")
+    @patch("gh_pulls_summary.main.fetch_reviews")
+    @patch("gh_pulls_summary.main.fetch_issue_events")
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_no_rank_when_no_feature_in_hierarchy(
+        self,
+        mock_fetch_pull_requests,
+        mock_fetch_issue_events,
+        mock_fetch_reviews,
+        mock_fetch_user_details,
+    ):
+        """
+        Test that no rank is assigned when there's no Feature/Initiative in the hierarchy.
+        """
+        from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 100,
+                "title": "Test PR",
+                "user": {"login": "testuser"},
+                "draft": False,
+                "created_at": "2025-01-01T00:00:00Z",
+                "html_url": "https://github.com/owner/repo/pull/100",
+                "body": "| **Feature / Initiative** | [TASK-100](https://issues.example.com/browse/TASK-100) |",
+            }
+        ]
+
+        mock_fetch_issue_events.return_value = [
+            {"event": "ready_for_review", "created_at": "2025-01-02T00:00:00Z"}
+        ]
+        mock_fetch_reviews.return_value = []
+        mock_fetch_user_details.return_value = {
+            "name": "Test User",
+            "html_url": "https://github.com/testuser",
+        }
+
+        jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
+
+        jira_client.get_issues_metadata.return_value = {
+            "TASK-100": {
+                "key": "TASK-100",
+                "fields": {
+                    "summary": "Task",
+                    "issuetype": {"name": "Task"},
+                    "status": {"name": "Backlog"},
+                    "customfield_12345": None,
+                },
+                "_rank_field_id": "customfield_12345",
+            },
+        }
+
+        # No ancestors (orphaned task)
+        jira_client.get_ancestors = Mock(return_value=[])
+
+        def mock_get_issue_type(issue_data):
+            return issue_data.get("fields", {}).get("issuetype", {}).get("name")
+
+        def mock_get_issue_status(issue_data):
+            return issue_data.get("fields", {}).get("status", {}).get("name")
+
+        def mock_extract_rank_value(issue_data):
+            return issue_data.get("fields", {}).get("customfield_12345")
+
+        jira_client.get_issue_type.side_effect = mock_get_issue_type
+        jira_client.get_issue_status.side_effect = mock_get_issue_status
+        jira_client.extract_rank_value.side_effect = mock_extract_rank_value
+
+        pull_requests, _ = fetch_and_process_pull_requests(
+            "owner",
+            "repo",
+            jira_client=jira_client,
+            jira_issue_patterns=[r"(TASK-\d+)"],
+            github_token="test_token",
+        )
+
+        self.assertEqual(len(pull_requests), 1)
+        pr = pull_requests[0]
+
+        # Should have no rank (no Feature/Initiative in hierarchy)
+        # Empty string is used instead of None for easier markdown formatting
+        self.assertEqual(pr.get("rank"), "")
+
+
 class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
     """Test cases for markdown table row formatting of synthetic JIRA entries."""
 
@@ -1020,6 +1349,507 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
         self.assertIn("2 of 2", row)
         # Should have rank
         self.assertIn("0_i00002 ANSTRAT-5678", row)
+
+
+class TestJiraClientAncestorMethods(unittest.TestCase):
+    """Test cases for JIRA client ancestor traversal methods."""
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    def test_discover_parent_fields_success(self, mock_get):
+        """Test successful discovery of parent fields."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        # Mock editmeta response with parent fields
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "fields": {
+                "customfield_10014": {
+                    "name": "Parent Link",
+                    "schema": {"custom": "com.atlassian.jpo:jpo-custom-field-parent"},
+                },
+                "customfield_10015": {
+                    "name": "Epic Link",
+                    "schema": {"custom": "com.pyxis.greenhopper.jira:gh-epic-link"},
+                },
+                "summary": {"name": "Summary", "schema": {"type": "string"}},
+            }
+        }
+        mock_get.return_value = mock_response
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        parent_fields = client._discover_parent_fields("TEST-123", "TEST", "Story")
+
+        # Should discover both parent-type fields
+        self.assertEqual(len(parent_fields), 2)
+        self.assertIn("customfield_10014", parent_fields)
+        self.assertIn("customfield_10015", parent_fields)
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    def test_discover_parent_fields_caching(self, mock_get):
+        """Test that parent field discovery results are cached."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "fields": {
+                "customfield_10014": {
+                    "name": "Parent Link",
+                    "schema": {"custom": "com.atlassian.jpo:jpo-custom-field-parent"},
+                }
+            }
+        }
+        mock_get.return_value = mock_response
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        # First call should hit API
+        parent_fields1 = client._discover_parent_fields("TEST-123", "TEST", "Story")
+        self.assertEqual(mock_get.call_count, 1)
+
+        # Second call with same project:type should use cache
+        parent_fields2 = client._discover_parent_fields("TEST-124", "TEST", "Story")
+        self.assertEqual(mock_get.call_count, 1)  # No additional API call
+
+        # Results should be the same
+        self.assertEqual(parent_fields1, parent_fields2)
+
+    def test_find_parent_key_from_subtask_parent(self):
+        """Test finding parent key from standard subtask parent field."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+
+        issue_data = {
+            "key": "TEST-123",
+            "fields": {
+                "parent": {"key": "TEST-100"},
+                "project": {"key": "TEST"},
+                "issuetype": {"name": "Subtask"},
+            },
+        }
+
+        parent_key = client._find_parent_key(issue_data)
+        self.assertEqual(parent_key, "TEST-100")
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    def test_find_parent_key_from_custom_field(self, mock_get):
+        """Test finding parent key from custom parent link field."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        # Mock editmeta response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "fields": {
+                "customfield_10014": {
+                    "name": "Parent Link",
+                    "schema": {"custom": "com.atlassian.jpo:jpo-custom-field-parent"},
+                }
+            }
+        }
+        mock_get.return_value = mock_response
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        issue_data = {
+            "key": "TEST-123",
+            "fields": {
+                "project": {"key": "TEST"},
+                "issuetype": {"name": "Story"},
+                "customfield_10014": "TEST-100",  # Parent link
+            },
+        }
+
+        parent_key = client._find_parent_key(issue_data)
+        self.assertEqual(parent_key, "TEST-100")
+
+    def test_find_parent_key_no_parent(self):
+        """Test finding parent when no parent exists."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+
+        issue_data = {
+            "key": "TEST-123",
+            "fields": {
+                "project": {"key": "TEST"},
+                "issuetype": {"name": "Story"},
+            },
+        }
+
+        parent_key = client._find_parent_key(issue_data)
+        self.assertIsNone(parent_key)
+
+    def test_get_ancestors_with_metadata_cache(self):
+        """Test get_ancestors using metadata cache (no API calls)."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        # Build metadata cache: TASK-100 -> STORY-50 -> FEATURE-10
+        metadata_cache = {
+            "TASK-100": {
+                "key": "TASK-100",
+                "fields": {
+                    "parent": {"key": "STORY-50"},
+                    "issuetype": {"name": "Task"},
+                },
+            },
+            "STORY-50": {
+                "key": "STORY-50",
+                "fields": {
+                    "parent": {"key": "FEATURE-10"},
+                    "issuetype": {"name": "Story"},
+                },
+            },
+            "FEATURE-10": {
+                "key": "FEATURE-10",
+                "fields": {"issuetype": {"name": "Feature"}},
+            },
+        }
+
+        ancestors = client.get_ancestors("TASK-100", metadata_cache=metadata_cache)
+
+        self.assertEqual(len(ancestors), 2)
+        self.assertEqual(ancestors[0]["key"], "STORY-50")
+        self.assertEqual(ancestors[1]["key"], "FEATURE-10")
+
+    def test_get_ancestors_caching(self):
+        """Test that get_ancestors caches results."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        metadata_cache = {
+            "TASK-100": {
+                "key": "TASK-100",
+                "fields": {
+                    "parent": {"key": "STORY-50"},
+                    "issuetype": {"name": "Task"},
+                },
+            },
+            "STORY-50": {
+                "key": "STORY-50",
+                "fields": {"issuetype": {"name": "Story"}},
+            },
+        }
+
+        # First call
+        ancestors1 = client.get_ancestors("TASK-100", metadata_cache=metadata_cache)
+
+        # Second call should use internal cache
+        ancestors2 = client.get_ancestors("TASK-100")
+
+        self.assertEqual(ancestors1, ancestors2)
+        self.assertEqual(len(ancestors2), 1)
+
+    def test_get_ancestors_empty_cache(self):
+        """Test that get_ancestors caches empty results."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        metadata_cache = {
+            "TASK-100": {
+                "key": "TASK-100",
+                "fields": {"issuetype": {"name": "Task"}},  # No parent
+            }
+        }
+
+        # First call - no ancestors found
+        ancestors1 = client.get_ancestors("TASK-100", metadata_cache=metadata_cache)
+
+        # Second call should return cached empty result
+        ancestors2 = client.get_ancestors("TASK-100")
+
+        self.assertEqual(ancestors1, [])
+        self.assertEqual(ancestors2, [])
+
+    def test_get_ancestors_cycle_detection(self):
+        """Test that get_ancestors detects and handles cycles without infinite loop."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        # Create a cycle: A -> B -> C -> B (C points back to B)
+        metadata_cache = {
+            "TASK-A": {
+                "key": "TASK-A",
+                "fields": {
+                    "parent": {"key": "TASK-B"},
+                    "issuetype": {"name": "Task"},
+                },
+            },
+            "TASK-B": {
+                "key": "TASK-B",
+                "fields": {
+                    "parent": {"key": "TASK-C"},
+                    "issuetype": {"name": "Task"},
+                },
+            },
+            "TASK-C": {
+                "key": "TASK-C",
+                "fields": {
+                    "parent": {"key": "TASK-B"},  # Cycle!
+                    "issuetype": {"name": "Task"},
+                },
+            },
+        }
+
+        ancestors = client.get_ancestors("TASK-A", metadata_cache=metadata_cache)
+
+        # Should stop at cycle detection and not infinite loop
+        # Actual path: A -> B -> C -> B (detected), so 3 ancestors
+        self.assertEqual(len(ancestors), 3)
+        self.assertEqual(ancestors[0]["key"], "TASK-B")
+        self.assertEqual(ancestors[1]["key"], "TASK-C")
+        self.assertEqual(ancestors[2]["key"], "TASK-B")
+
+    def test_get_ancestors_max_depth(self):
+        """Test that get_ancestors respects max_depth."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        # Build long chain: TASK-5 -> TASK-4 -> TASK-3 -> TASK-2 -> TASK-1
+        metadata_cache = {}
+        for i in range(1, 6):
+            parent_key = f"TASK-{i - 1}" if i > 1 else None
+            metadata_cache[f"TASK-{i}"] = {
+                "key": f"TASK-{i}",
+                "fields": {
+                    "parent": {"key": parent_key} if parent_key else {},
+                    "issuetype": {"name": "Task"},
+                },
+            }
+
+        ancestors = client.get_ancestors(
+            "TASK-5", metadata_cache=metadata_cache, max_depth=2
+        )
+
+        # Should stop at max_depth=2
+        self.assertEqual(len(ancestors), 2)
+        self.assertEqual(ancestors[0]["key"], "TASK-4")
+        self.assertEqual(ancestors[1]["key"], "TASK-3")
+
+    def test_get_ancestors_missing_from_cache(self):
+        """Test get_ancestors when parent is missing from cache (old behavior for reference)."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        metadata_cache = {
+            "TASK-100": {
+                "key": "TASK-100",
+                "fields": {
+                    "parent": {"key": "STORY-50"},  # Parent not in cache
+                    "issuetype": {"name": "Task"},
+                },
+            }
+        }
+
+        ancestors = client.get_ancestors("TASK-100", metadata_cache=metadata_cache)
+
+        # Should stop when parent not found in cache and API call fails
+        self.assertEqual(len(ancestors), 0)
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    def test_get_ancestors_api_fallback_when_parent_missing(self, mock_get):
+        """Test that get_ancestors falls back to API when parent is missing from cache."""
+        from gh_pulls_summary.jira_client import JiraClient
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12345"
+
+        # Cache has the child, but not the parent or grandparent
+        metadata_cache = {
+            "STORY-100": {
+                "key": "STORY-100",
+                "fields": {
+                    "customfield_12311140": "EPIC-50",  # Epic Link to parent
+                    "issuetype": {"name": "Story"},
+                    "project": {"key": "TEST"},
+                },
+            }
+        }
+
+        # Mock API responses for missing parent and grandparent
+        def mock_api_response(*args, **_kwargs):
+            url = args[0]
+            response = Mock()
+            response.status_code = 200
+
+            if "STORY-100/editmeta" in url:
+                # editmeta for Story to discover parent fields
+                response.json.return_value = {
+                    "fields": {
+                        "customfield_12311140": {
+                            "name": "Epic Link",
+                            "schema": {
+                                "custom": "com.pyxis.greenhopper.jira:gh-epic-link"
+                            },
+                        }
+                    }
+                }
+            elif "EPIC-50/editmeta" in url:
+                # editmeta for Epic to discover parent fields
+                response.json.return_value = {
+                    "fields": {
+                        "customfield_12313140": {
+                            "name": "Parent Link",
+                            "schema": {
+                                "custom": "com.atlassian.jpo:jpo-custom-field-parent"
+                            },
+                        }
+                    }
+                }
+            elif "EPIC-50" in url:
+                # EPIC-50 parent data
+                response.json.return_value = {
+                    "key": "EPIC-50",
+                    "fields": {
+                        "customfield_12313140": "FEATURE-10",  # Parent Link to grandparent
+                        "issuetype": {"name": "Epic"},
+                        "project": {"key": "TEST"},
+                        "summary": "Epic 50",
+                        "status": {"name": "In Progress"},
+                        "priority": {"name": "High"},
+                    },
+                }
+            elif "FEATURE-10/editmeta" in url:
+                # editmeta for Feature
+                response.json.return_value = {"fields": {}}
+            elif "FEATURE-10" in url:
+                # FEATURE-10 grandparent data
+                response.json.return_value = {
+                    "key": "FEATURE-10",
+                    "fields": {
+                        "issuetype": {"name": "Feature"},
+                        "project": {"key": "TEST"},
+                        "summary": "Feature 10",
+                        "status": {"name": "In Progress"},
+                        "priority": {"name": "High"},
+                        "customfield_12345": "0|i00001:",  # Rank field
+                    },
+                }
+            return response
+
+        mock_get.side_effect = mock_api_response
+
+        ancestors = client.get_ancestors("STORY-100", metadata_cache=metadata_cache)
+
+        # Should have fetched both parents via API
+        self.assertEqual(len(ancestors), 2)
+        self.assertEqual(ancestors[0]["key"], "EPIC-50")
+        self.assertEqual(ancestors[1]["key"], "FEATURE-10")
+
+
+class TestJiraRateLimitRetry(unittest.TestCase):
+    """Test JIRA rate limit retry logic."""
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    @patch("time.sleep")
+    def test_rate_limit_retry_success(self, mock_sleep, mock_get):
+        """Test successful retry after rate limit error."""
+        # First call returns 429, second call returns 200
+        mock_response_429 = Mock()
+        mock_response_429.status_code = 429
+        mock_response_429.text = '{"message":"Rate limit exceeded."}'
+
+        mock_response_200 = Mock()
+        mock_response_200.status_code = 200
+        mock_response_200.json.return_value = {
+            "key": "TEST-123",
+            "fields": {
+                "summary": "Test issue",
+                "issuetype": {"name": "Feature"},
+            },
+        }
+
+        mock_get.side_effect = [mock_response_429, mock_response_200]
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12311940"
+
+        issue_data = client.get_issue("TEST-123")
+
+        # Should have succeeded on second try
+        self.assertEqual(issue_data["key"], "TEST-123")
+
+        # Should have slept once with 2 seconds delay
+        mock_sleep.assert_called_once_with(2)
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    @patch("time.sleep")
+    def test_rate_limit_retry_exhausted(self, mock_sleep, mock_get):
+        """Test that retry gives up after max_retries."""
+        # All calls return 429
+        mock_response = Mock()
+        mock_response.status_code = 429
+        mock_response.text = '{"message":"Rate limit exceeded."}'
+        mock_get.return_value = mock_response
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12311940"
+
+        with self.assertRaises(JiraClientError) as context:
+            client.get_issue("TEST-123")
+
+        self.assertIn("Rate limit exceeded", str(context.exception))
+        self.assertIn("after 3 retries", str(context.exception))
+
+        # Should have slept 3 times with exponential backoff: 2, 4, 8
+        self.assertEqual(mock_sleep.call_count, 3)
+        mock_sleep.assert_any_call(2)
+        mock_sleep.assert_any_call(4)
+        mock_sleep.assert_any_call(8)
+
+    @patch("gh_pulls_summary.jira_client.requests.Session.get")
+    @patch("time.sleep")
+    def test_rate_limit_retry_exponential_backoff(self, mock_sleep, mock_get):
+        """Test exponential backoff timing."""
+        # First two calls return 429, third returns 200
+        mock_response_429 = Mock()
+        mock_response_429.status_code = 429
+        mock_response_429.text = '{"message":"Rate limit exceeded."}'
+
+        mock_response_200 = Mock()
+        mock_response_200.status_code = 200
+        mock_response_200.json.return_value = {
+            "key": "TEST-123",
+            "fields": {"summary": "Test", "issuetype": {"name": "Feature"}},
+        }
+
+        mock_get.side_effect = [
+            mock_response_429,
+            mock_response_429,
+            mock_response_200,
+        ]
+
+        client = JiraClient(base_url="https://issues.example.com", token="testtoken")
+        client._rank_field_id = "customfield_12311940"
+
+        issue_data = client.get_issue("TEST-123")
+
+        # Should have succeeded on third try
+        self.assertEqual(issue_data["key"], "TEST-123")
+
+        # Should have slept twice with exponential backoff: 2, 4 seconds
+        self.assertEqual(mock_sleep.call_count, 2)
+        calls = [call[0][0] for call in mock_sleep.call_args_list]
+        self.assertEqual(calls, [2, 4])
 
 
 if __name__ == "__main__":

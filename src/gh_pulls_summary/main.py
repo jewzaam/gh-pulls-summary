@@ -732,6 +732,7 @@ def get_rank_for_pr(
 
     Filtering rules:
     - Only include Feature and Initiative issue types
+    - If referenced issue is not Feature/Initiative, traverse hierarchy to find ancestor
     - Only include issues with status: New, Backlog, In Progress, or Refinement
     - For multiple issues, select the highest priority (lowest lexicographic rank)
     - Replace pipe characters with underscores for markdown safety
@@ -739,7 +740,7 @@ def get_rank_for_pr(
     Args:
         jira_client: JIRA client instance
         issue_keys: List of JIRA issue keys for this PR
-        jira_metadata_cache: Pre-fetched metadata for all issues
+        jira_metadata_cache: Pre-fetched metadata for all issues (must include parent fields)
 
     Returns:
         Rank value as string (with pipes replaced by underscores and issue key appended), or None
@@ -771,13 +772,45 @@ def get_rank_for_pr(
             f"{issue_key}: type={issue_type}, status={issue_status}, rank={rank_value}"
         )
 
-        # Only include Feature and Initiative with allowed statuses
-        if (
-            issue_type in ["Feature", "Initiative"]
-            and issue_status in allowed_statuses
-            and rank_value
-        ):
-            valid_rank_tuples.append((rank_value, issue_key))
+        # Check if this is a Feature or Initiative
+        if issue_type in ["Feature", "Initiative"]:
+            if issue_status in allowed_statuses and rank_value:
+                valid_rank_tuples.append((rank_value, issue_key))
+        else:
+            # Not a Feature/Initiative - traverse hierarchy using cache to find ancestor
+            logging.info(
+                f"{issue_key} is type '{issue_type}' (not Feature/Initiative), traversing hierarchy to find ancestor"
+            )
+            try:
+                ancestors = jira_client.get_ancestors(
+                    issue_key, metadata_cache=jira_metadata_cache
+                )
+                for ancestor in ancestors:
+                    ancestor_key = ancestor.get("key")
+                    if not ancestor_key:
+                        continue
+
+                    ancestor_type = jira_client.get_issue_type(ancestor)
+                    ancestor_status = jira_client.get_issue_status(ancestor)
+                    ancestor_rank = jira_client.extract_rank_value(ancestor)
+
+                    logging.debug(
+                        f"  Ancestor {ancestor_key}: type={ancestor_type}, status={ancestor_status}, rank={ancestor_rank}"
+                    )
+
+                    if (
+                        ancestor_type in ["Feature", "Initiative"]
+                        and ancestor_status in allowed_statuses
+                        and ancestor_rank
+                    ):
+                        logging.info(
+                            f"  Found {ancestor_type} ancestor {ancestor_key} with rank {ancestor_rank}"
+                        )
+                        valid_rank_tuples.append((ancestor_rank, ancestor_key))
+                        # Use first matching ancestor (closest in hierarchy)
+                        break
+            except Exception as e:
+                logging.warning(f"Failed to traverse hierarchy for {issue_key}: {e}")
 
     if not valid_rank_tuples:
         return None
@@ -968,9 +1001,12 @@ def fetch_and_process_pull_requests(
                 f"Batch fetching metadata for {len(unique_keys)} unique JIRA issues..."
             )
             try:
-                jira_metadata_cache = jira_client.get_issues_metadata(unique_keys)
+                # Fetch metadata with parent fields for hierarchy traversal
+                jira_metadata_cache = jira_client.get_issues_metadata(
+                    unique_keys, include_parent_fields=True
+                )
                 logging.info(
-                    f"Successfully fetched metadata for {len(jira_metadata_cache)} issues"
+                    f"Successfully fetched metadata for {len(jira_metadata_cache)} issues with parent fields"
                 )
             except JiraClientError as e:
                 logging.error(f"Failed to batch fetch JIRA metadata: {e}")
