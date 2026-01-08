@@ -204,6 +204,12 @@ def parse_arguments():
         action="append",
         help="Regex pattern to extract JIRA issue keys from file contents. Use parentheses to capture the issue key (e.g., '(ANSTRAT-\\d+)'). Can be specified multiple times to use multiple patterns. If not specified, defaults to '(ANSTRAT-\\d+)'.",
     )
+    parser.add_argument(
+        "--jira-include",
+        type=str,
+        action="append",
+        help="Always include this JIRA issue in the output, regardless of filters. Useful for marker stories when looking at rankings. Can be specified multiple times.",
+    )
 
     # Enable tab completion
     argcomplete.autocomplete(parser)
@@ -856,15 +862,22 @@ def fetch_and_process_pull_requests(
     url_from_pr_content=None,
     jira_client=None,
     jira_issue_patterns=None,
+    jira_include=None,
     github_token=None,
 ):
     """
     Fetches and processes pull requests for the specified repository.
     If a single PR number is specified, only that PR is fetched and processed.
-    Returns a list of processed pull request data.
+    Returns a tuple of (pull_requests, jira_issues).
 
     Args:
         jira_issue_patterns: List of regex patterns to extract JIRA issue keys from file contents
+        jira_include: List of JIRA issue keys to always include in the output
+
+    Returns:
+        Tuple of (pull_requests, jira_issues) where:
+        - pull_requests: List of processed pull request data
+        - jira_issues: Dict mapping JIRA issue keys to their metadata
     """
     logging.info(f"Fetching pull requests for repository {owner}/{repo}")
     pull_requests = []
@@ -904,6 +917,13 @@ def fetch_and_process_pull_requests(
             "Preprocessing: Collecting JIRA issues from all PRs for batch fetch..."
         )
         all_issue_keys: set[str] = set()
+
+        # Add jira-include issues to the set
+        if jira_include:
+            all_issue_keys.update(jira_include)
+            logging.info(
+                f"Adding {len(jira_include)} jira-include issues: {', '.join(jira_include)}"
+            )
 
         for pr in prs:
             pr = cast(dict[str, Any], pr)
@@ -1130,9 +1150,25 @@ def fetch_and_process_pull_requests(
             }
         )
 
+    # Build JIRA issues dictionary from metadata cache
+    jira_issues = {}
+    if jira_client and jira_metadata_cache:
+        for issue_key, issue_data in jira_metadata_cache.items():
+            # Extract rank for this issue
+            pr_rank = get_rank_for_pr(jira_client, [issue_key], jira_metadata_cache)
+
+            # Get JIRA summary
+            jira_summary = issue_data.get("fields", {}).get("summary", issue_key)
+
+            jira_issues[issue_key] = {
+                "title": jira_summary,
+                "url": f"{jira_client.base_url}/browse/{issue_key}",
+                "rank": pr_rank or "",
+            }
+
     logging.info("Done loading PR data.")
 
-    return pull_requests
+    return pull_requests, jira_issues
 
 
 def parse_column_titles(args):
@@ -1207,11 +1243,48 @@ def create_markdown_table_header(titles, url_column, rank_column):
     return header, separator
 
 
-def create_markdown_table_row(pr, url_column, rank_column):
+def create_markdown_table_row(pr, url_column, rank_column, jira_issues=None):
     """
     Creates a single markdown table row for a pull request.
+
+    Args:
+        pr: Pull request data dictionary
+        url_column: Whether to include URLs column
+        rank_column: Whether to include rank column
+        jira_issues: Dictionary mapping JIRA keys to their data (for synthetic entries)
     """
-    row = f"| {pr['date']} | {pr['title']} #[{pr['number']}]({pr['url']}) | [{pr['author_name']}]({pr['author_url']}) | {pr['changes']} | {pr['approvals']} of {pr['reviews']} |"
+    # Handle synthetic JIRA entries (no PR number)
+    if pr["number"] is None and "jira_key" in pr:
+        # Synthetic JIRA entry: lookup JIRA data
+        jira_key = pr["jira_key"]
+        if jira_issues and jira_key in jira_issues:
+            jira_data = jira_issues[jira_key]
+            title_link = f"[{jira_data['title']}]({jira_data['url']})"
+        else:
+            title_link = f"[{jira_key}]()"
+        author_link = ""
+        approvals_text = ""
+        changes_text = ""
+    else:
+        # Regular PR entry
+        title_link = f"{pr['title']} #[{pr['number']}]({pr['url']})"
+
+        # Handle author
+        if pr["author_name"]:
+            author_link = f"[{pr['author_name']}]({pr['author_url']})"
+        else:
+            author_link = ""
+
+        # Handle reviews/approvals
+        if pr["reviews"] > 0:
+            approvals_text = f"{pr['approvals']} of {pr['reviews']}"
+        else:
+            approvals_text = ""
+
+        # Handle changes (always show for regular PRs, even if 0)
+        changes_text = str(pr["changes"])
+
+    row = f"| {pr['date']} | {title_link} | {author_link} | {changes_text} | {approvals_text} |"
 
     if url_column:
         if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
@@ -1281,7 +1354,7 @@ def generate_markdown_output(args):
     # else: already a list from argparse action="append"
 
     # Fetch and process pull requests
-    pull_requests = fetch_and_process_pull_requests(
+    pull_requests, jira_issues = fetch_and_process_pull_requests(
         args.owner,
         args.repo,
         args.draft_filter,
@@ -1291,8 +1364,50 @@ def generate_markdown_output(args):
         args.url_from_pr_content,
         jira_client=jira_client,
         jira_issue_patterns=jira_issue_patterns,
+        jira_include=args.jira_include,
         github_token=github_token,
     )
+
+    # Add synthetic entries for jira-include issues that weren't found in any PRs
+    if args.jira_include and jira_issues:
+        # Collect all issue keys already present in pull_requests
+        existing_issue_keys = set()
+        for pr in pull_requests:
+            if pr.get("rank"):
+                # Extract issue key from rank (format: "rank_value ISSUE-123")
+                rank_parts = pr["rank"].split()
+                if rank_parts:
+                    issue_key = rank_parts[-1]
+                    existing_issue_keys.add(issue_key)
+
+        # Create synthetic entries for missing issues
+        for issue_key in args.jira_include:
+            if issue_key not in existing_issue_keys and issue_key in jira_issues:
+                jira_data = jira_issues[issue_key]
+                if jira_data.get("rank"):  # Only include if has valid rank
+                    logging.info(
+                        f"Creating synthetic entry for jira-include issue {issue_key}"
+                    )
+                    pull_requests.append(
+                        {
+                            "date": "",
+                            "title": None,  # No PR title
+                            "number": None,  # No PR number - marker for synthetic entry
+                            "url": None,  # No PR URL
+                            "jira_key": issue_key,  # Reference to jira_issues dict
+                            "author_name": "",
+                            "author_url": "",
+                            "reviews": 0,
+                            "approvals": 0,
+                            "changes": "",
+                            "pr_body_urls_dict": {},
+                            "rank": jira_data["rank"],
+                        }
+                    )
+                else:
+                    logging.warning(
+                        f"Could not get rank for jira-include issue {issue_key} - skipping"
+                    )
 
     # Determine if we need to add URL and rank columns
     url_column = bool(args.url_from_pr_content)
@@ -1337,7 +1452,7 @@ def generate_markdown_output(args):
 
     # Add data rows
     for pr in sorted_prs:
-        row = create_markdown_table_row(pr, url_column, rank_column)
+        row = create_markdown_table_row(pr, url_column, rank_column, jira_issues)
         output.append(row)
 
     return "\n".join(output)

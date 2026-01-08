@@ -83,6 +83,42 @@ class TestArgumentParsing(unittest.TestCase):
         self.assertEqual(args.repo, "repo")
         self.assertEqual(args.url_from_pr_content, "http://example.com")
 
+    @patch(
+        "sys.argv",
+        [
+            "gh_pulls_summary.py",
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+            "--jira-include",
+            "ANSTRAT-1234",
+            "--jira-include",
+            "ANSTRAT-5678",
+        ],
+    )
+    def test_parse_arguments_with_jira_include(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.jira_include, ["ANSTRAT-1234", "ANSTRAT-5678"])
+
+    @patch(
+        "sys.argv",
+        [
+            "gh_pulls_summary.py",
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+        ],
+    )
+    def test_parse_arguments_without_jira_include(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertIsNone(args.jira_include)
+
 
 if __name__ == "__main__":
     unittest.main()

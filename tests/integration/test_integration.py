@@ -242,7 +242,7 @@ class TestEndToEndIntegration(IntegrationTestBase):
 
     def test_fetch_and_process_pull_requests_real_repo(self):
         """Test complete pull request processing workflow."""
-        prs = fetch_and_process_pull_requests(
+        prs, _ = fetch_and_process_pull_requests(
             self.TEST_OWNER, self.TEST_REPO, github_token=os.getenv("GITHUB_TOKEN")
         )
 
@@ -257,7 +257,7 @@ class TestEndToEndIntegration(IntegrationTestBase):
     def test_single_pr_processing_real_repo(self):
         """Test processing a single pull request."""
         pr_number = self.KNOWN_PR_NUMBERS[0]
-        prs = fetch_and_process_pull_requests(
+        prs, _ = fetch_and_process_pull_requests(
             self.TEST_OWNER, self.TEST_REPO, pr_number=pr_number
         )
 
@@ -272,12 +272,12 @@ class TestEndToEndIntegration(IntegrationTestBase):
     def test_draft_filter_real_repo(self):
         """Test draft filtering with real repository."""
         # Test no-drafts filter
-        prs_no_drafts = fetch_and_process_pull_requests(
+        prs_no_drafts, _ = fetch_and_process_pull_requests(
             self.TEST_OWNER, self.TEST_REPO, draft_filter="no-drafts"
         )
 
         # Test only-drafts filter
-        prs_only_drafts = fetch_and_process_pull_requests(
+        prs_only_drafts, _ = fetch_and_process_pull_requests(
             self.TEST_OWNER, self.TEST_REPO, draft_filter="only-drafts"
         )
 
@@ -307,6 +307,7 @@ class TestEndToEndIntegration(IntegrationTestBase):
             sort_column = "date"
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_include = None
             jira_url = None
             jira_token = None
             jira_rank_field = None
@@ -358,7 +359,7 @@ class TestRealWorldScenarios(IntegrationTestBase):
         pr_number = 3
         url_pattern = r"https://[^\s]+"
 
-        prs = fetch_and_process_pull_requests(
+        prs, _ = fetch_and_process_pull_requests(
             self.TEST_OWNER,
             self.TEST_REPO,
             pr_number=pr_number,
@@ -392,8 +393,10 @@ class TestRealWorldScenarios(IntegrationTestBase):
                 sort_column = sort_col
                 include_rank = False
                 jira_issue_pattern = r"(ANSTRAT-\d+)"
+                jira_include = None
                 jira_url = None
                 jira_token = None
+                jira_rank_field = None
                 github_token = os.getenv("GITHUB_TOKEN")
 
             args = Args()

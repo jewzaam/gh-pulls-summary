@@ -76,7 +76,7 @@ class SimpleIntegrationTests(unittest.TestCase):
         pr_number = 1
 
         try:
-            prs = fetch_and_process_pull_requests(
+            prs, _ = fetch_and_process_pull_requests(
                 self.TEST_OWNER,
                 self.TEST_REPO,
                 pr_number=pr_number,
@@ -117,6 +117,7 @@ class SimpleIntegrationTests(unittest.TestCase):
             sort_column = "date"
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_include = None
             jira_url = None
             jira_token = None
             jira_rank_field = None
@@ -151,7 +152,7 @@ class SimpleIntegrationTests(unittest.TestCase):
 
         try:
             # Test filtering for non-draft PRs
-            prs_no_drafts = fetch_and_process_pull_requests(
+            prs_no_drafts, _ = fetch_and_process_pull_requests(
                 self.TEST_OWNER,
                 self.TEST_REPO,
                 draft_filter="no-drafts",
