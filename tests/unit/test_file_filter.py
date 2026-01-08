@@ -55,7 +55,7 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
 
         # Call the function with file-include filters
         file_include = [re.compile(r".*\.py$")]
-        pull_requests = fetch_and_process_pull_requests(
+        pull_requests, _ = fetch_and_process_pull_requests(
             "owner", "repo", file_include=file_include
         )
 
@@ -112,7 +112,7 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
 
         # Call the function with file-exclude filters
         file_exclude = [re.compile(r"docs/.*")]
-        pull_requests = fetch_and_process_pull_requests(
+        pull_requests, _ = fetch_and_process_pull_requests(
             "owner", "repo", file_exclude=file_exclude
         )
 
@@ -179,7 +179,7 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
         # Call the function with both file-include and file-exclude filters
         file_include = [re.compile(r".*\.py$")]
         file_exclude = [re.compile(r"docs/.*")]
-        pull_requests = fetch_and_process_pull_requests(
+        pull_requests, _ = fetch_and_process_pull_requests(
             "owner", "repo", file_include=file_include, file_exclude=file_exclude
         )
 

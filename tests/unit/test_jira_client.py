@@ -652,12 +652,14 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
 
         # Create mock JIRA client
         jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
         jira_client.get_issues_metadata.return_value = {
             "ANSTRAT-1234": {
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "In Progress"},
                     "customfield_12345": "0_i00ywg:9",
+                    "summary": "Test feature from file content",
                 }
             }
         }
@@ -668,7 +670,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
 
         # Call with file_include and JIRA client
         file_include = [re.compile(r"proposals/.*\.md$")]
-        pull_requests = fetch_and_process_pull_requests(
+        pull_requests, _ = fetch_and_process_pull_requests(
             "owner",
             "repo",
             file_include=file_include,
@@ -732,7 +734,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
 
         # Call with file_include and JIRA client
         file_include = [re.compile(r"proposals/.*\.md$")]
-        pull_requests = fetch_and_process_pull_requests(
+        pull_requests, _ = fetch_and_process_pull_requests(
             "owner",
             "repo",
             file_include=file_include,
@@ -745,6 +747,279 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
         # But file content fetch was skipped (no PR ref)
         self.assertEqual(len(pull_requests), 1)
         # Should still return PR without rank since no ref to fetch files
+
+
+class TestJiraInclude(unittest.TestCase):
+    """Test cases for jira-include feature."""
+
+    @patch("gh_pulls_summary.main.fetch_reviews")
+    @patch("gh_pulls_summary.main.fetch_user_details")
+    @patch("gh_pulls_summary.main.fetch_issue_events")
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_jira_include_with_no_prs(
+        self,
+        mock_fetch_pull_requests,
+        mock_fetch_issue_events,
+        mock_fetch_user_details,
+        mock_fetch_reviews,
+    ):
+        """Test that jira-include creates synthetic entries when no PRs exist."""
+        from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        # Mock no pull requests
+        mock_fetch_pull_requests.return_value = []
+
+        # Mock other dependencies
+        mock_fetch_issue_events.return_value = []
+        mock_fetch_reviews.return_value = []
+        mock_fetch_user_details.return_value = {"name": "User", "html_url": "url"}
+
+        # Create mock JIRA client
+        jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
+        jira_client.get_issues_metadata.return_value = {
+            "ANSTRAT-1234": {
+                "fields": {
+                    "issuetype": {"name": "Feature"},
+                    "status": {"name": "Backlog"},
+                    "customfield_12345": "0|i00001",
+                    "summary": "Test included JIRA issue",
+                },
+                "_rank_field_id": "customfield_12345",
+            }
+        }
+        jira_client.get_issue_type.return_value = "Feature"
+        jira_client.get_issue_status.return_value = "Backlog"
+        jira_client.extract_rank_value.return_value = "0|i00001"
+
+        # Call with jira-include
+        pull_requests, jira_issues = fetch_and_process_pull_requests(
+            "owner",
+            "repo",
+            jira_client=jira_client,
+            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_include=["ANSTRAT-1234"],
+            github_token="test_token",
+        )
+
+        # Verify no synthetic entry in pull_requests (yet - that happens in generate_markdown_output)
+        self.assertEqual(len(pull_requests), 0)
+
+        # Verify JIRA issues dict was populated with the jira-include issue
+        self.assertEqual(len(jira_issues), 1)
+        self.assertIn("ANSTRAT-1234", jira_issues)
+        # Verify JIRA data is populated correctly
+        jira_data = jira_issues["ANSTRAT-1234"]
+        self.assertIsNotNone(jira_data["title"])
+        self.assertIn("browse/ANSTRAT-1234", jira_data["url"])
+        self.assertIn("ANSTRAT-1234", jira_data["rank"])
+
+    @patch("gh_pulls_summary.main.fetch_pr_files")
+    @patch("gh_pulls_summary.main.fetch_reviews")
+    @patch("gh_pulls_summary.main.fetch_user_details")
+    @patch("gh_pulls_summary.main.fetch_issue_events")
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_jira_include_no_duplicate_if_pr_exists(
+        self,
+        mock_fetch_pull_requests,
+        mock_fetch_issue_events,
+        mock_fetch_user_details,
+        mock_fetch_reviews,
+        mock_fetch_pr_files,
+    ):
+        """Test that jira-include doesn't duplicate if PR already has the issue."""
+
+        from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        # Mock pull requests with JIRA issue in body
+        mock_fetch_pull_requests.return_value = [
+            {
+                "number": 1,
+                "title": "Add feature",
+                "user": {"login": "user1"},
+                "html_url": "url1",
+                "draft": False,
+                "created_at": "2025-05-01T12:00:00Z",
+                "body": "| **Feature / Initiative** | [ANSTRAT-1234](url) |",
+                "head": {},
+            }
+        ]
+
+        # Mock other dependencies
+        mock_fetch_issue_events.return_value = []
+        mock_fetch_reviews.return_value = []
+        mock_fetch_user_details.return_value = {"name": "User", "html_url": "url"}
+        mock_fetch_pr_files.return_value = []
+
+        # Create mock JIRA client
+        jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
+        jira_client.get_issues_metadata.return_value = {
+            "ANSTRAT-1234": {
+                "fields": {
+                    "issuetype": {"name": "Feature"},
+                    "status": {"name": "In Progress"},
+                    "customfield_12345": "0|i00001",
+                },
+                "_rank_field_id": "customfield_12345",
+            }
+        }
+        jira_client.get_issue_type.return_value = "Feature"
+        jira_client.get_issue_status.return_value = "In Progress"
+        jira_client.extract_rank_value.return_value = "0|i00001"
+
+        # Call with jira-include
+        pull_requests, _ = fetch_and_process_pull_requests(
+            "owner",
+            "repo",
+            jira_client=jira_client,
+            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_include=["ANSTRAT-1234"],
+            github_token="test_token",
+        )
+
+        # Verify only one entry (the PR, not a duplicate synthetic entry)
+        self.assertEqual(len(pull_requests), 1)
+        self.assertEqual(pull_requests[0]["number"], 1)
+        self.assertIn("ANSTRAT-1234", pull_requests[0]["rank"])
+
+    @patch("gh_pulls_summary.main.fetch_reviews")
+    @patch("gh_pulls_summary.main.fetch_user_details")
+    @patch("gh_pulls_summary.main.fetch_issue_events")
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_jira_include_skips_invalid_issue(
+        self,
+        mock_fetch_pull_requests,
+        mock_fetch_issue_events,
+        mock_fetch_user_details,
+        mock_fetch_reviews,
+    ):
+        """Test that jira-include skips issues that have no rank."""
+        from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        # Mock no pull requests
+        mock_fetch_pull_requests.return_value = []
+
+        # Mock other dependencies
+        mock_fetch_issue_events.return_value = []
+        mock_fetch_reviews.return_value = []
+        mock_fetch_user_details.return_value = {"name": "User", "html_url": "url"}
+
+        # Create mock JIRA client - issue is Outcome type (filtered out)
+        jira_client = Mock(spec=JiraClient)
+        jira_client.base_url = "https://issues.example.com"
+        jira_client.get_issues_metadata.return_value = {
+            "ANSTRAT-9999": {
+                "fields": {
+                    "issuetype": {"name": "Outcome"},  # Not Feature or Initiative
+                    "status": {"name": "Backlog"},
+                    "customfield_12345": "0|i00001",
+                },
+                "_rank_field_id": "customfield_12345",
+            }
+        }
+        jira_client.get_issue_type.return_value = "Outcome"
+        jira_client.get_issue_status.return_value = "Backlog"
+        jira_client.extract_rank_value.return_value = "0|i00001"
+
+        # Call with jira-include
+        pull_requests, _ = fetch_and_process_pull_requests(
+            "owner",
+            "repo",
+            jira_client=jira_client,
+            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_include=["ANSTRAT-9999"],
+            github_token="test_token",
+        )
+
+        # Verify no synthetic entry was created (Outcome type is filtered)
+        self.assertEqual(len(pull_requests), 0)
+
+
+class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
+    """Test cases for markdown table row formatting of synthetic JIRA entries."""
+
+    def test_create_markdown_table_row_for_synthetic_entry(self):
+        """Test that synthetic JIRA entries are formatted correctly in markdown."""
+        from gh_pulls_summary.main import create_markdown_table_row
+
+        # Synthetic JIRA entry (no PR number, has jira_key reference)
+        synthetic_pr = {
+            "date": "",
+            "title": None,
+            "number": None,
+            "url": None,
+            "jira_key": "ANSTRAT-1234",
+            "author_name": "",
+            "author_url": "",
+            "reviews": 0,
+            "approvals": 0,
+            "changes": "",
+            "pr_body_urls_dict": {},
+            "rank": "0_i00001 ANSTRAT-1234",
+        }
+
+        # JIRA issues dict
+        jira_issues = {
+            "ANSTRAT-1234": {
+                "title": "Implement feature XYZ",
+                "url": "https://issues.example.com/browse/ANSTRAT-1234",
+                "rank": "0_i00001 ANSTRAT-1234",
+            }
+        }
+
+        row = create_markdown_table_row(
+            synthetic_pr, url_column=False, rank_column=True, jira_issues=jira_issues
+        )
+
+        # Should have JIRA title linked to JIRA URL (no PR number)
+        self.assertIn(
+            "[Implement feature XYZ](https://issues.example.com/browse/ANSTRAT-1234)",
+            row,
+        )
+        # Should not have PR number format #[123]
+        self.assertNotIn("#[", row)
+        # Should have empty fields for author, changes, approvals
+        self.assertIn("|  |  |  |", row)  # Empty date, author, changes, approvals
+        # Should have rank
+        self.assertIn("0_i00001 ANSTRAT-1234", row)
+
+    def test_create_markdown_table_row_for_normal_pr(self):
+        """Test that normal PR entries are formatted correctly in markdown."""
+        from gh_pulls_summary.main import create_markdown_table_row
+
+        # Normal PR entry
+        normal_pr = {
+            "date": "2025-01-08",
+            "title": "Add feature",
+            "number": 123,
+            "url": "https://github.com/owner/repo/pull/123",
+            "author_name": "John Doe",
+            "author_url": "https://github.com/johndoe",
+            "reviews": 2,
+            "approvals": 2,
+            "changes": 0,
+            "pr_body_urls_dict": {},
+            "rank": "0_i00002 ANSTRAT-5678",
+        }
+
+        row = create_markdown_table_row(
+            normal_pr, url_column=False, rank_column=True, jira_issues=None
+        )
+
+        # Should have PR number format
+        self.assertIn("Add feature #[123](https://github.com/owner/repo/pull/123)", row)
+        # Should have author
+        self.assertIn("[John Doe](https://github.com/johndoe)", row)
+        # Should have date
+        self.assertIn("2025-01-08", row)
+        # Should have reviews formatted
+        self.assertIn("2 of 2", row)
+        # Should have rank
+        self.assertIn("0_i00002 ANSTRAT-5678", row)
 
 
 if __name__ == "__main__":

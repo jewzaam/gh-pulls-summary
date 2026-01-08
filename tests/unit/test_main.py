@@ -50,6 +50,7 @@ class TestMainFunction(unittest.TestCase):
             sort_column = "date"
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_include = None
             github_token = None
             jira_url = None
             jira_token = None
@@ -60,32 +61,35 @@ class TestMainFunction(unittest.TestCase):
         with patch(
             "gh_pulls_summary.main.fetch_and_process_pull_requests"
         ) as mock_fetch:
-            mock_fetch.return_value = [
-                {
-                    "date": "2025-05-02",
-                    "title": "Fix bug Y",
-                    "number": 124,
-                    "url": "https://github.com/owner/repo/pull/124",
-                    "author_name": "Jane Smith",
-                    "author_url": "https://github.com/janesmith",
-                    "reviews": 1,
-                    "approvals": 1,
-                    "changes": 0,
-                    "pr_body_urls_dict": {},
-                },
-                {
-                    "date": "2025-05-01",
-                    "title": "Add feature X",
-                    "number": 123,
-                    "url": "https://github.com/owner/repo/pull/123",
-                    "author_name": "John Doe",
-                    "author_url": "https://github.com/johndoe",
-                    "reviews": 2,
-                    "approvals": 2,
-                    "changes": 1,
-                    "pr_body_urls_dict": {},
-                },
-            ]
+            mock_fetch.return_value = (
+                [
+                    {
+                        "date": "2025-05-02",
+                        "title": "Fix bug Y",
+                        "number": 124,
+                        "url": "https://github.com/owner/repo/pull/124",
+                        "author_name": "Jane Smith",
+                        "author_url": "https://github.com/janesmith",
+                        "reviews": 1,
+                        "approvals": 1,
+                        "changes": 0,
+                        "pr_body_urls_dict": {},
+                    },
+                    {
+                        "date": "2025-05-01",
+                        "title": "Add feature X",
+                        "number": 123,
+                        "url": "https://github.com/owner/repo/pull/123",
+                        "author_name": "John Doe",
+                        "author_url": "https://github.com/johndoe",
+                        "reviews": 2,
+                        "approvals": 2,
+                        "changes": 1,
+                        "pr_body_urls_dict": {},
+                    },
+                ],
+                {},  # Empty jira_issues dict
+            )
             markdown_output = generate_markdown_output(args)
         expected_output = (
             "| Date 🔽 | Title | Author | Change Requested | Approvals |\n"
@@ -111,6 +115,7 @@ class TestMainFunction(unittest.TestCase):
             sort_column = "date"
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_include = None
             github_token = None
             jira_url = None
             jira_token = None
@@ -120,20 +125,23 @@ class TestMainFunction(unittest.TestCase):
         with patch(
             "gh_pulls_summary.main.fetch_and_process_pull_requests"
         ) as mock_fetch:
-            mock_fetch.return_value = [
-                {
-                    "date": "2025-05-01",
-                    "title": "Add feature X",
-                    "number": 123,
-                    "url": "https://github.com/owner/repo/pull/123",
-                    "author_name": "John Doe",
-                    "author_url": "https://github.com/johndoe",
-                    "reviews": 2,
-                    "approvals": 2,
-                    "changes": 1,
-                    "pr_body_urls_dict": {},
-                }
-            ]
+            mock_fetch.return_value = (
+                [
+                    {
+                        "date": "2025-05-01",
+                        "title": "Add feature X",
+                        "number": 123,
+                        "url": "https://github.com/owner/repo/pull/123",
+                        "author_name": "John Doe",
+                        "author_url": "https://github.com/johndoe",
+                        "reviews": 2,
+                        "approvals": 2,
+                        "changes": 1,
+                        "pr_body_urls_dict": {},
+                    }
+                ],
+                {},  # Empty jira_issues dict
+            )
             markdown_output = generate_markdown_output(args)
         expected_output = (
             "| Ready Date 🔽 | Title | Author | Change Requested | Total Approvals |\n"
@@ -158,6 +166,7 @@ class TestMainFunction(unittest.TestCase):
             sort_column = "approvals"
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_include = None
             github_token = None
             jira_url = None
             jira_token = None
@@ -167,32 +176,35 @@ class TestMainFunction(unittest.TestCase):
         with patch(
             "gh_pulls_summary.main.fetch_and_process_pull_requests"
         ) as mock_fetch:
-            mock_fetch.return_value = [
-                {
-                    "date": "2025-05-01",
-                    "title": "Add feature X",
-                    "number": 123,
-                    "url": "https://github.com/owner/repo/pull/123",
-                    "author_name": "John Doe",
-                    "author_url": "https://github.com/johndoe",
-                    "reviews": 2,
-                    "approvals": 2,
-                    "changes": 1,
-                    "pr_body_urls_dict": {},
-                },
-                {
-                    "date": "2025-05-02",
-                    "title": "Fix bug Y",
-                    "number": 124,
-                    "url": "https://github.com/owner/repo/pull/124",
-                    "author_name": "Jane Smith",
-                    "author_url": "https://github.com/janesmith",
-                    "reviews": 1,
-                    "approvals": 1,
-                    "changes": 0,
-                    "pr_body_urls_dict": {},
-                },
-            ]
+            mock_fetch.return_value = (
+                [
+                    {
+                        "date": "2025-05-01",
+                        "title": "Add feature X",
+                        "number": 123,
+                        "url": "https://github.com/owner/repo/pull/123",
+                        "author_name": "John Doe",
+                        "author_url": "https://github.com/johndoe",
+                        "reviews": 2,
+                        "approvals": 2,
+                        "changes": 1,
+                        "pr_body_urls_dict": {},
+                    },
+                    {
+                        "date": "2025-05-02",
+                        "title": "Fix bug Y",
+                        "number": 124,
+                        "url": "https://github.com/owner/repo/pull/124",
+                        "author_name": "Jane Smith",
+                        "author_url": "https://github.com/janesmith",
+                        "reviews": 1,
+                        "approvals": 1,
+                        "changes": 0,
+                        "pr_body_urls_dict": {},
+                    },
+                ],
+                {},  # Empty jira_issues dict
+            )
             markdown_output = generate_markdown_output(args)
         expected_output = (
             "| Date | Title | Author | Change Requested | Approvals 🔽 |\n"
@@ -903,7 +915,9 @@ class TestHelperFunctions(unittest.TestCase):
             "reviews": 3,
         }
 
-        result = create_markdown_table_row(pr, url_column=False, rank_column=False)
+        result = create_markdown_table_row(
+            pr, url_column=False, rank_column=False, jira_issues=None
+        )
 
         expected = "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 1 | 2 of 3 |"
         self.assertEqual(result, expected)
@@ -928,7 +942,9 @@ class TestHelperFunctions(unittest.TestCase):
             },
         }
 
-        result = create_markdown_table_row(pr, url_column=True, rank_column=False)
+        result = create_markdown_table_row(
+            pr, url_column=True, rank_column=False, jira_issues=None
+        )
 
         expected = "| 2025-05-01 | Add feature X #[123](https://github.com/owner/repo/pull/123) | [John Doe](https://github.com/johndoe) | 0 | 1 of 1 | [bar123](https://example.com/foo/bar123) [baz456](https://example.com/foo/baz456) |"
         self.assertEqual(result, expected)
@@ -950,7 +966,9 @@ class TestHelperFunctions(unittest.TestCase):
             "pr_body_urls_dict": {},
         }
 
-        result = create_markdown_table_row(pr, url_column=True, rank_column=False)
+        result = create_markdown_table_row(
+            pr, url_column=True, rank_column=False, jira_issues=None
+        )
 
         expected = "| 2025-05-02 | Fix bug Y #[124](https://github.com/owner/repo/pull/124) | [Jane Smith](https://github.com/janesmith) | 2 | 0 of 2 | |"
         self.assertEqual(result, expected)
@@ -972,7 +990,9 @@ class TestHelperFunctions(unittest.TestCase):
             # No pr_body_urls_dict key
         }
 
-        result = create_markdown_table_row(pr, url_column=True, rank_column=False)
+        result = create_markdown_table_row(
+            pr, url_column=True, rank_column=False, jira_issues=None
+        )
 
         expected = "| 2025-05-03 | Update docs #[125](https://github.com/owner/repo/pull/125) | [Bob Wilson](https://github.com/bobwilson) | 0 | 1 of 1 | |"
         self.assertEqual(result, expected)
