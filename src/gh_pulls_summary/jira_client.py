@@ -78,19 +78,30 @@ class JiraClient:
             logging.info(f"Using explicit JIRA Rank field: {rank_field_id}")
         self._rank_field_id: str | None = rank_field_id if rank_field_id else None
 
+        # Cache for discovered parent fields per project:issue_type
+        self._parent_field_cache: dict[str, list[str]] = {}
+
+        # Global set of all discovered parent field IDs (for efficient fetching)
+        self._all_parent_field_ids: set[str] = set()
+
+        # Cache for ancestor chains to avoid redundant lookups
+        self._ancestors_cache: dict[str, list[dict[str, Any]]] = {}
+
     def _make_request(
         self,
         endpoint: str,
         params: dict[str, Any] | None = None,
         resource_name: str = "resource",
+        max_retries: int = 3,
     ) -> Any:
         """
-        Make an API request with centralized error handling.
+        Make an API request with centralized error handling and retry logic for rate limits.
 
         Args:
             endpoint: API endpoint path (relative to api_base)
             params: Query parameters
             resource_name: Name of resource for error messages
+            max_retries: Maximum number of retries for rate limit errors (429)
 
         Returns:
             JSON response data
@@ -99,53 +110,77 @@ class JiraClient:
             JiraAuthenticationError: If authentication fails
             JiraClientError: For other API errors
         """
+        import time
+
         url = urljoin(self.api_base, endpoint)
         logging.debug(f"JIRA API request: {url}")
         if params:
             logging.debug(f"Query parameters: {params}")
 
-        try:
-            response = self.session.get(url, params=params or {}, timeout=30)
-        except requests.exceptions.Timeout:
-            raise JiraClientError(
-                f"Request timed out while fetching {resource_name} from JIRA. "
-                f"The JIRA server may be slow or unreachable."
-            )
-        except requests.exceptions.ConnectionError:
-            raise JiraClientError(
-                f"Connection failed while fetching {resource_name} from JIRA. "
-                f"Please check your network connection and JIRA URL."
-            )
-        except requests.exceptions.RequestException as e:
-            raise JiraClientError(
-                f"Network error while fetching {resource_name} from JIRA: {e}"
-            )
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.session.get(url, params=params or {}, timeout=30)
+            except requests.exceptions.Timeout:
+                raise JiraClientError(
+                    f"Request timed out while fetching {resource_name} from JIRA. "
+                    f"The JIRA server may be slow or unreachable."
+                )
+            except requests.exceptions.ConnectionError:
+                raise JiraClientError(
+                    f"Connection failed while fetching {resource_name} from JIRA. "
+                    f"Please check your network connection and JIRA URL."
+                )
+            except requests.exceptions.RequestException as e:
+                raise JiraClientError(
+                    f"Network error while fetching {resource_name} from JIRA: {e}"
+                )
 
-        logging.debug(f"Response status: {response.status_code}")
+            logging.debug(f"Response status: {response.status_code}")
 
-        # Handle error responses
-        if response.status_code == 401:
-            raise JiraAuthenticationError(
-                "JIRA authentication failed. Please check your username and token."
-            )
-        if response.status_code == 403:
-            raise JiraClientError(
-                f"Access denied to {resource_name}. Check permissions or authentication."
-            )
-        if response.status_code == 404:
-            raise JiraClientError(f"{resource_name} not found in JIRA.")
-        if response.status_code != 200:
-            raise JiraClientError(
-                f"JIRA API request failed with status {response.status_code}. "
-                f"Endpoint: {endpoint}. Response: {response.text[:200]}"
-            )
+            # Handle rate limit with retry
+            if response.status_code == 429:
+                if attempt < max_retries:
+                    # Exponential backoff: 2, 4, 8 seconds
+                    delay = 2 ** (attempt + 1)
+                    logging.warning(
+                        f"Rate limit exceeded for {resource_name}. "
+                        f"Retrying in {delay} seconds (attempt {attempt + 1}/{max_retries})..."
+                    )
+                    time.sleep(delay)
+                    continue
+                # Max retries exceeded
+                raise JiraClientError(
+                    f"Rate limit exceeded for {resource_name} after {max_retries} retries. "
+                    f"Endpoint: {endpoint}. Response: {response.text[:200]}"
+                )
 
-        try:
-            return response.json()
-        except ValueError as e:
-            raise JiraClientError(
-                f"Invalid JSON response from JIRA API. The service may be experiencing issues. Details: {e}"
-            )
+            # Handle other error responses
+            if response.status_code == 401:
+                raise JiraAuthenticationError(
+                    "JIRA authentication failed. Please check your username and token."
+                )
+            if response.status_code == 403:
+                raise JiraClientError(
+                    f"Access denied to {resource_name}. Check permissions or authentication."
+                )
+            if response.status_code == 404:
+                raise JiraClientError(f"{resource_name} not found in JIRA.")
+            if response.status_code != 200:
+                raise JiraClientError(
+                    f"JIRA API request failed with status {response.status_code}. "
+                    f"Endpoint: {endpoint}. Response: {response.text[:200]}"
+                )
+
+            # Success - parse and return JSON
+            try:
+                return response.json()
+            except ValueError as e:
+                raise JiraClientError(
+                    f"Invalid JSON response from JIRA API. The service may be experiencing issues. Details: {e}"
+                )
+
+        # Should never reach here, but for type safety
+        raise JiraClientError(f"Unexpected error while fetching {resource_name}")
 
     def test_connection(self) -> dict[str, Any]:
         """
@@ -165,7 +200,7 @@ class JiraClient:
 
     def get_issue(self, issue_key: str) -> dict[str, Any]:
         """
-        Fetch a single JIRA issue with rank field.
+        Fetch a single JIRA issue with necessary fields for hierarchy traversal.
 
         Args:
             issue_key: JIRA issue key (e.g., 'ANSTRAT-1660')
@@ -180,10 +215,21 @@ class JiraClient:
         if self._rank_field_id is None:
             self._rank_field_id = self._discover_rank_field()
 
-        # Request issue with rank field
-        fields = ["key", "summary", "status", "issuetype", "priority"]
+        # Request core fields plus rank and any discovered parent link fields
+        fields = [
+            "key",
+            "summary",
+            "status",
+            "issuetype",
+            "priority",
+            "parent",
+            "project",
+        ]
         if self._rank_field_id:
             fields.append(self._rank_field_id)
+
+        # Include all discovered parent link fields for hierarchy traversal
+        fields.extend(self._all_parent_field_ids)
 
         endpoint = f"issue/{issue_key}"
         params = {"fields": ",".join(fields)}
@@ -248,7 +294,9 @@ class JiraClient:
             logging.warning(f"Failed to discover JIRA Rank field: {e}")
             return None
 
-    def get_issues_metadata(self, issue_keys: list[str]) -> dict[str, dict[str, Any]]:
+    def get_issues_metadata(
+        self, issue_keys: list[str], include_parent_fields: bool = False
+    ) -> dict[str, dict[str, Any]]:
         """
         Fetch metadata for multiple issues efficiently using batch API.
 
@@ -257,6 +305,7 @@ class JiraClient:
 
         Args:
             issue_keys: List of JIRA issue keys
+            include_parent_fields: Whether to include parent and project fields for hierarchy traversal
 
         Returns:
             Dictionary mapping issue keys to their metadata
@@ -276,16 +325,37 @@ class JiraClient:
         keys_str = ", ".join(issue_keys)
         jql = f"key in ({keys_str})"
 
-        # Specify fields to fetch
+        # Build field list
         fields = ["key", "summary", "status", "issuetype", "priority"]
         if self._rank_field_id:
             fields.append(self._rank_field_id)
 
-        params = {
-            "jql": jql,
-            "fields": ",".join(fields),
-            "maxResults": len(issue_keys),
-        }
+        if include_parent_fields:
+            # Add standard parent and project fields for hierarchy traversal
+            fields.extend(["parent", "project"])
+            # If we haven't discovered any parent fields yet, request all fields
+            # on this first batch to ensure we get custom parent links
+            # After that, we'll know the specific field IDs and can request only those
+            if not self._all_parent_field_ids:
+                params = {
+                    "jql": jql,
+                    "fields": "*all",
+                    "maxResults": len(issue_keys),
+                }
+            else:
+                # We know the parent field IDs, so only request those specific fields
+                fields.extend(self._all_parent_field_ids)
+                params = {
+                    "jql": jql,
+                    "fields": ",".join(fields),
+                    "maxResults": len(issue_keys),
+                }
+        else:
+            params = {
+                "jql": jql,
+                "fields": ",".join(fields),
+                "maxResults": len(issue_keys),
+            }
 
         try:
             response = cast(
@@ -372,3 +442,280 @@ class JiraClient:
         status = fields.get("status", {})
         name = status.get("name")
         return cast(str, name) if name is not None else None
+
+    def _discover_parent_fields(
+        self, issue_key: str, project: str, issue_type: str
+    ) -> list[str]:
+        """
+        Discover parent fields for a specific project:issue_type combination.
+
+        Uses the JIRA editmeta API to find fields with parent-type schema.
+
+        Args:
+            issue_key: Issue key to query editmeta for
+            project: Project key
+            issue_type: Issue type name
+
+        Returns:
+            List of field IDs that are parent-type fields
+        """
+        cache_key = f"{project}::{issue_type}"
+
+        # Check cache first
+        if cache_key in self._parent_field_cache:
+            cached_fields = self._parent_field_cache[cache_key]
+            logging.debug(
+                f"Using cached parent fields for {cache_key}: {cached_fields}"
+            )
+            return cached_fields
+
+        # Query editmeta for this issue to discover parent fields
+        parent_fields = []
+        try:
+            endpoint = f"issue/{issue_key}/editmeta"
+            response = self._make_request(endpoint, resource_name="editmeta")
+
+            fields = response.get("fields", {})
+            for field_id, field_info in fields.items():
+                schema = field_info.get("schema", {})
+                custom_type = schema.get("custom", "")
+
+                # Identify parent-type fields by their schema custom type
+                if custom_type in [
+                    "com.pyxis.greenhopper.jira:gh-epic-link",  # Epic Link fields
+                    "com.atlassian.jpo:jpo-custom-field-parent",  # Parent Link fields
+                ]:
+                    parent_fields.append(field_id)
+                    # Add to global set for efficient fetching
+                    self._all_parent_field_ids.add(field_id)
+                    logging.debug(
+                        f"Found parent field {field_id} ({field_info.get('name', 'Unknown')}) for {cache_key}"
+                    )
+
+            # Cache the discovered fields
+            self._parent_field_cache[cache_key] = parent_fields
+            logging.debug(f"Cached parent fields for {cache_key}: {parent_fields}")
+
+        except Exception as e:
+            logging.warning(f"Failed to discover parent fields for {cache_key}: {e}")
+            # No fallback - let caller handle empty list
+
+        return parent_fields
+
+    def _find_parent_key(self, issue_data: dict[str, Any]) -> str | None:
+        """
+        Find parent key from issue data using multiple strategies.
+
+        Args:
+            issue_data: Issue data from get_issue()
+
+        Returns:
+            Parent issue key if found, None otherwise
+        """
+        fields = issue_data.get("fields", {})
+
+        # Check for subtask parent first
+        parent = fields.get("parent")
+        if parent:
+            parent_key = parent.get("key")
+            if parent_key:
+                logging.debug(f"Found subtask parent: {parent_key}")
+                return cast(str, parent_key)
+
+        # Try dynamic parent field discovery
+        project = fields.get("project", {}).get("key", "")
+        issue_type = fields.get("issuetype", {}).get("name", "")
+        issue_key = issue_data.get("key", "")
+
+        if project and issue_type and issue_key:
+            parent_field_ids = self._discover_parent_fields(
+                issue_key, project, issue_type
+            )
+
+            # Try each discovered parent field until we find one with a value
+            for field_id in parent_field_ids:
+                parent_link = fields.get(field_id)
+                if parent_link:
+                    logging.debug(f"Found parent using field {field_id}: {parent_link}")
+                    return cast(str, parent_link)
+
+        return None
+
+    def get_ancestors(
+        self,
+        issue_key: str,
+        metadata_cache: dict[str, dict[str, Any]] | None = None,
+        max_depth: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Get all ancestor issues (parent, grandparent, etc.) for a given issue.
+
+        Uses cache-first strategy:
+        1. Check internal ancestors cache - return if hit
+        2. If metadata_cache provided, traverse using cached metadata (no API calls)
+        3. If no metadata_cache, fetch from API and populate internal cache
+        4. Always cache results (including empty lists) to avoid repeated lookups
+
+        This is useful for finding Feature/Initiative ancestors when a PR
+        references a child issue type (e.g., Story, SDP, Proposal).
+
+        Uses dynamic field discovery to find parent relationships via:
+        - Standard subtask parent field
+        - Epic Link fields (com.pyxis.greenhopper.jira:gh-epic-link)
+        - Parent Link fields (com.atlassian.jpo:jpo-custom-field-parent)
+
+        Args:
+            issue_key: JIRA issue key to find ancestors for
+            metadata_cache: Optional pre-fetched metadata dictionary for efficient lookups
+            max_depth: Maximum depth to traverse (default 5)
+
+        Returns:
+            List of ancestor issue data dictionaries, ordered from immediate parent to root
+
+        Raises:
+            JiraClientError: If API request fails (only when metadata_cache not provided)
+        """
+        # Check ancestors cache first
+        if issue_key in self._ancestors_cache:
+            cached_ancestors = self._ancestors_cache[issue_key]
+            logging.debug(
+                f"Found {len(cached_ancestors)} cached ancestors for {issue_key}"
+            )
+            return cached_ancestors
+
+        # If metadata_cache provided, use cache-based traversal
+        if metadata_cache is not None:
+            ancestors = self._traverse_from_metadata_cache(
+                issue_key, metadata_cache, max_depth
+            )
+        else:
+            # Fall back to API-based traversal
+            ancestors = self._traverse_from_api(issue_key, max_depth)
+
+        # Cache the result (even if empty) to avoid repeated lookups
+        self._ancestors_cache[issue_key] = ancestors
+        logging.debug(f"Cached {len(ancestors)} ancestors for {issue_key}")
+
+        return ancestors
+
+    def _traverse_from_metadata_cache(
+        self,
+        issue_key: str,
+        metadata_cache: dict[str, dict[str, Any]],
+        max_depth: int,
+    ) -> list[dict[str, Any]]:
+        """
+        Traverse hierarchy using metadata cache with API fallback.
+
+        Args:
+            issue_key: JIRA issue key to find ancestors for
+            metadata_cache: Pre-fetched metadata dictionary
+            max_depth: Maximum depth to traverse
+
+        Returns:
+            List of ancestor issue data dictionaries
+        """
+        ancestors = []
+        current_key = issue_key
+        visited = set()
+        depth = 0
+
+        while depth < max_depth:
+            # Cycle detection
+            if current_key in visited:
+                logging.debug(f"Cycle detected: {current_key} already visited")
+                break
+            visited.add(current_key)
+
+            # Try to get current issue from cache, then API
+            issue_data = metadata_cache.get(current_key)
+            if not issue_data:
+                try:
+                    issue_data = self.get_issue(current_key)
+                    logging.debug(f"Issue {current_key} not in cache, fetched via API")
+                except JiraClientError as e:
+                    logging.warning(f"Failed to fetch issue {current_key}: {e}")
+                    break
+
+            parent_key = self._find_parent_key(issue_data)
+
+            if not parent_key:
+                logging.debug(f"No parent found for {current_key}, reached root")
+                break
+
+            logging.debug(f"Found parent {parent_key} for {current_key} (from cache)")
+
+            # Try to get parent from cache, then API
+            parent_data = metadata_cache.get(parent_key)
+            if not parent_data:
+                try:
+                    parent_data = self.get_issue(parent_key)
+                    logging.debug(f"Parent {parent_key} not in cache, fetched via API")
+                except JiraClientError as e:
+                    logging.warning(f"Failed to fetch parent {parent_key}: {e}")
+                    break
+
+            ancestors.append(parent_data)
+
+            # Move up the hierarchy
+            current_key = parent_key
+            depth += 1
+
+        return ancestors
+
+    def _traverse_from_api(
+        self, issue_key: str, max_depth: int
+    ) -> list[dict[str, Any]]:
+        """
+        Traverse hierarchy using API calls (used when no metadata cache available).
+
+        Args:
+            issue_key: JIRA issue key to find ancestors for
+            max_depth: Maximum depth to traverse
+
+        Returns:
+            List of ancestor issue data dictionaries
+
+        Raises:
+            JiraClientError: If API request fails
+        """
+        ancestors = []
+        current_key = issue_key
+        visited = set()
+        depth = 0
+
+        while depth < max_depth:
+            # Cycle detection
+            if current_key in visited:
+                logging.debug(f"Cycle detected: {current_key} already visited")
+                break
+            visited.add(current_key)
+
+            try:
+                # Fetch current issue to find its parent
+                issue_data = self.get_issue(current_key)
+                parent_key = self._find_parent_key(issue_data)
+
+                if not parent_key:
+                    # No more parents, we've reached the root
+                    logging.debug(f"No parent found for {current_key}, reached root")
+                    break
+
+                logging.debug(f"Found parent {parent_key} for {current_key}")
+
+                # Fetch parent issue details
+                parent_data = self.get_issue(parent_key)
+                ancestors.append(parent_data)
+
+                # Move up the hierarchy
+                current_key = parent_key
+                depth += 1
+
+            except JiraClientError as e:
+                logging.warning(
+                    f"Failed to traverse JIRA hierarchy at {current_key}: {e}"
+                )
+                break
+
+        logging.info(f"Found {len(ancestors)} ancestors for {issue_key}")
+        return ancestors
