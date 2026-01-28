@@ -827,7 +827,7 @@ def get_rank_for_pr(
                             )
                             open_rank_tuples.append((ancestor_rank, ancestor_key))
                             break
-                        elif ancestor_status in closed_statuses:
+                        if ancestor_status in closed_statuses:
                             logging.info(
                                 f"  Found closed {ancestor_type} ancestor {ancestor_key} with rank {ancestor_rank}"
                             )
@@ -1193,7 +1193,7 @@ def fetch_and_process_pull_requests(
 
         # Get rank if JIRA client is configured (using pre-fetched metadata)
         pr_rank = None
-        pr_closed_issue_keys = set()
+        pr_closed_issue_keys: set[str] = set()
         if jira_client and pr_number in pr_issue_keys_map:
             issue_keys = pr_issue_keys_map[pr_number]
             pr_rank, pr_closed_issue_keys = get_rank_for_pr(
