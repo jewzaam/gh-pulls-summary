@@ -85,6 +85,7 @@ class TestProcessingLogic(unittest.TestCase):
                 "approvals": 1,
                 "changes": 0,
                 "rank": "",
+                "closed_issue_keys": set(),
             }
         ]
         self.assertEqual(result, expected_result)
@@ -134,6 +135,7 @@ class TestProcessingLogic(unittest.TestCase):
                 "approvals": 0,
                 "changes": 0,
                 "rank": "",
+                "closed_issue_keys": set(),
             }
         ]
         self.assertEqual(result, expected_result)

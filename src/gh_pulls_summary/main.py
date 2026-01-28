@@ -728,7 +728,7 @@ def get_rank_for_pr(
     jira_client: JiraClient | None,
     issue_keys: list[str],
     jira_metadata_cache: dict[str, dict[str, Any]],
-) -> str | None:
+) -> tuple[str | None, set[str]]:
     """
     Get the highest priority rank for a PR based on its JIRA issues.
 
@@ -737,7 +737,8 @@ def get_rank_for_pr(
     Filtering rules:
     - Only include Feature and Initiative issue types
     - If referenced issue is not Feature/Initiative, traverse hierarchy to find ancestor
-    - Only include issues with status: New, Backlog, In Progress, or Refinement
+    - Prefer open issues (New, Backlog, In Progress, Refinement)
+    - Fall back to closed issues if no open issues with ranks are found
     - For multiple issues, select the highest priority (lowest lexicographic rank)
     - Replace pipe characters with underscores for markdown safety
 
@@ -747,10 +748,12 @@ def get_rank_for_pr(
         jira_metadata_cache: Pre-fetched metadata for all issues (must include parent fields)
 
     Returns:
-        Rank value as string (with pipes replaced by underscores and issue key appended), or None
+        Tuple of (rank_string, closed_issue_keys):
+        - rank_string: Rank value with issue key appended, or None
+        - closed_issue_keys: Set of JIRA keys that are in Closed status
     """
     if not jira_client or not issue_keys:
-        return None
+        return None, set()
 
     # Get metadata for this PR's issues from cache
     metadata = {
@@ -760,13 +763,17 @@ def get_rank_for_pr(
     }
 
     if not metadata:
-        return None
+        return None, set()
 
-    # Allowed statuses for ranking
-    allowed_statuses = {"New", "Backlog", "In Progress", "Refinement"}
+    # Status definitions
+    open_statuses = {"New", "Backlog", "In Progress", "Refinement"}
+    closed_statuses = {"Closed"}
 
-    # Filter by issue type, status, and extract ranks with issue keys
-    valid_rank_tuples = []
+    # Track closed issues and separate rank tuples by status
+    closed_issue_keys = set()
+    open_rank_tuples = []
+    closed_rank_tuples = []
+
     for issue_key, issue_data in metadata.items():
         issue_type = jira_client.get_issue_type(issue_data)
         issue_status = jira_client.get_issue_status(issue_data)
@@ -776,10 +783,17 @@ def get_rank_for_pr(
             f"{issue_key}: type={issue_type}, status={issue_status}, rank={rank_value}"
         )
 
+        # Track if this issue is closed
+        if issue_status in closed_statuses:
+            closed_issue_keys.add(issue_key)
+
         # Check if this is a Feature or Initiative
         if issue_type in ["Feature", "Initiative"]:
-            if issue_status in allowed_statuses and rank_value:
-                valid_rank_tuples.append((rank_value, issue_key))
+            if rank_value:
+                if issue_status in open_statuses:
+                    open_rank_tuples.append((rank_value, issue_key))
+                elif issue_status in closed_statuses:
+                    closed_rank_tuples.append((rank_value, issue_key))
         else:
             # Not a Feature/Initiative - traverse hierarchy using cache to find ancestor
             logging.info(
@@ -802,22 +816,31 @@ def get_rank_for_pr(
                         f"  Ancestor {ancestor_key}: type={ancestor_type}, status={ancestor_status}, rank={ancestor_rank}"
                     )
 
-                    if (
-                        ancestor_type in ["Feature", "Initiative"]
-                        and ancestor_status in allowed_statuses
-                        and ancestor_rank
-                    ):
-                        logging.info(
-                            f"  Found {ancestor_type} ancestor {ancestor_key} with rank {ancestor_rank}"
-                        )
-                        valid_rank_tuples.append((ancestor_rank, ancestor_key))
-                        # Use first matching ancestor (closest in hierarchy)
-                        break
+                    # Track if ancestor is closed
+                    if ancestor_status in closed_statuses:
+                        closed_issue_keys.add(ancestor_key)
+
+                    if ancestor_type in ["Feature", "Initiative"] and ancestor_rank:
+                        if ancestor_status in open_statuses:
+                            logging.info(
+                                f"  Found open {ancestor_type} ancestor {ancestor_key} with rank {ancestor_rank}"
+                            )
+                            open_rank_tuples.append((ancestor_rank, ancestor_key))
+                            break
+                        if ancestor_status in closed_statuses:
+                            logging.info(
+                                f"  Found closed {ancestor_type} ancestor {ancestor_key} with rank {ancestor_rank}"
+                            )
+                            closed_rank_tuples.append((ancestor_rank, ancestor_key))
+                            break
             except Exception as e:
                 logging.warning(f"Failed to traverse hierarchy for {issue_key}: {e}")
 
+    # Prefer open issues, fall back to closed issues
+    valid_rank_tuples = open_rank_tuples if open_rank_tuples else closed_rank_tuples
+
     if not valid_rank_tuples:
-        return None
+        return None, closed_issue_keys
 
     # Select highest priority (lowest lexicographic value)
     # Empty ranks should be treated as lowest priority
@@ -832,7 +855,9 @@ def get_rank_for_pr(
 
     # Replace pipe characters with underscores for markdown safety
     # Append issue key for transparency
-    return f"{highest_priority_rank.replace('|', '_')} {issue_key}"
+    rank_string = f"{highest_priority_rank.replace('|', '_')} {issue_key}"
+
+    return rank_string, closed_issue_keys
 
 
 def fetch_pr_diff(owner, repo, pr_number, github_token=None):
@@ -1168,9 +1193,12 @@ def fetch_and_process_pull_requests(
 
         # Get rank if JIRA client is configured (using pre-fetched metadata)
         pr_rank = None
+        pr_closed_issue_keys: set[str] = set()
         if jira_client and pr_number in pr_issue_keys_map:
             issue_keys = pr_issue_keys_map[pr_number]
-            pr_rank = get_rank_for_pr(jira_client, issue_keys, jira_metadata_cache)
+            pr_rank, pr_closed_issue_keys = get_rank_for_pr(
+                jira_client, issue_keys, jira_metadata_cache
+            )
             if pr_rank:
                 logging.debug(f"PR #{pr_number} rank: {pr_rank}")
 
@@ -1187,6 +1215,7 @@ def fetch_and_process_pull_requests(
                 "changes": pr_changes,
                 "pr_body_urls_dict": pr_body_urls_dict,
                 "rank": pr_rank or "",
+                "closed_issue_keys": pr_closed_issue_keys,
             }
         )
 
@@ -1195,7 +1224,9 @@ def fetch_and_process_pull_requests(
     if jira_client and jira_metadata_cache:
         for issue_key, issue_data in jira_metadata_cache.items():
             # Extract rank for this issue
-            pr_rank = get_rank_for_pr(jira_client, [issue_key], jira_metadata_cache)
+            pr_rank, closed_keys = get_rank_for_pr(
+                jira_client, [issue_key], jira_metadata_cache
+            )
 
             # Get JIRA summary
             jira_summary = issue_data.get("fields", {}).get("summary", issue_key)
@@ -1204,6 +1235,7 @@ def fetch_and_process_pull_requests(
                 "title": jira_summary,
                 "url": f"{jira_client.base_url}/browse/{issue_key}",
                 "rank": pr_rank or "",
+                "closed": issue_key in closed_keys,
             }
 
     logging.info("Done loading PR data.")
@@ -1328,10 +1360,15 @@ def create_markdown_table_row(pr, url_column, rank_column, jira_issues=None):
 
     if url_column:
         if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
-            url_links = " ".join(
-                f"[{text}]({url})" for text, url in pr["pr_body_urls_dict"].items()
-            )
-            row = row + f" {url_links} |"
+            closed_keys = pr.get("closed_issue_keys", set())
+            url_links = []
+            for text, url in pr["pr_body_urls_dict"].items():
+                # Apply strikethrough to closed JIRA issues
+                if text in closed_keys:
+                    url_links.append(f"[~~{text}~~]({url})")
+                else:
+                    url_links.append(f"[{text}]({url})")
+            row = row + f" {' '.join(url_links)} |"
         else:
             row = row + " |"
 
@@ -1442,6 +1479,7 @@ def generate_markdown_output(args):
                             "changes": "",
                             "pr_body_urls_dict": {},
                             "rank": jira_data["rank"],
+                            "closed_issue_keys": set(),
                         }
                     )
                 else:

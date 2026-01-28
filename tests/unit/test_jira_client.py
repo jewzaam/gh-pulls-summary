@@ -354,9 +354,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         # Issue keys extracted from PR
         issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
+        rank, closed_keys = get_rank_for_pr(
+            mock_client, issue_keys, jira_metadata_cache
+        )
         # Pipe should be replaced with underscore, issue key appended
         self.assertEqual(rank, "0_i00ywg:9 ANSTRAT-1660")
+        self.assertEqual(closed_keys, set())
 
     @patch("gh_pulls_summary.main.JiraClient")
     def test_get_rank_for_pr_multiple_issues(self, mock_jira_client_class):
@@ -385,9 +388,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         # Issue keys extracted from PR (metadata table specified 1660 as primary)
         issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
+        rank, closed_keys = get_rank_for_pr(
+            mock_client, issue_keys, jira_metadata_cache
+        )
         # Should return rank for the primary issue
         self.assertEqual(rank, "0_i00ywh: ANSTRAT-1660")
+        self.assertEqual(closed_keys, set())
 
     @patch("gh_pulls_summary.main.JiraClient")
     def test_get_rank_for_pr_filter_outcome(self, mock_jira_client_class):
@@ -416,9 +422,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         # Issue keys extracted from PR
         issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
+        rank, closed_keys = get_rank_for_pr(
+            mock_client, issue_keys, jira_metadata_cache
+        )
         # Should return None because Outcome is filtered out
         self.assertIsNone(rank)
+        self.assertEqual(closed_keys, set())
 
     def test_get_rank_for_pr_no_client(self):
         """Test getting rank with no JIRA client."""
@@ -427,8 +436,9 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         issue_keys = ["ANSTRAT-1660"]
         jira_metadata_cache = {}
 
-        rank = get_rank_for_pr(None, issue_keys, jira_metadata_cache)
+        rank, closed_keys = get_rank_for_pr(None, issue_keys, jira_metadata_cache)
         self.assertIsNone(rank)
+        self.assertEqual(closed_keys, set())
 
     @patch("gh_pulls_summary.main.JiraClient")
     def test_get_rank_for_pr_filter_by_status(self, mock_jira_client_class):
@@ -457,9 +467,12 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         # Issue keys extracted from PR
         issue_keys = ["ANSTRAT-1660"]
 
-        rank = get_rank_for_pr(mock_client, issue_keys, jira_metadata_cache)
+        rank, closed_keys = get_rank_for_pr(
+            mock_client, issue_keys, jira_metadata_cache
+        )
         # Should return None because Release Pending is not an allowed status
         self.assertIsNone(rank)
+        self.assertEqual(closed_keys, set())
 
 
 class TestFileContentExtraction(unittest.TestCase):
