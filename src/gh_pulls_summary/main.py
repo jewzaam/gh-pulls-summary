@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from typing import Any, cast
+from urllib.parse import quote
 
 import argcomplete
 import requests
@@ -500,7 +501,10 @@ def fetch_file_content(owner, repo, file_path, ref, github_token=None):
     Returns:
         File content as string, or None if fetch fails
     """
-    endpoint = f"/repos/{owner}/{repo}/contents/{file_path}"
+    # URL-encode the file path to handle special characters like ?
+    # Keep forward slashes unencoded as they are path separators
+    encoded_file_path = quote(file_path, safe="/")
+    endpoint = f"/repos/{owner}/{repo}/contents/{encoded_file_path}"
     headers = get_github_headers(github_token)
     headers["Accept"] = "application/vnd.github.raw"
     params = {"ref": ref}

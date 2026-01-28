@@ -1056,6 +1056,26 @@ class TestFetchFileContent(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    @patch("gh_pulls_summary.main.requests.get")
+    def test_fetch_file_content_special_characters(self, mock_get):
+        """Test URL encoding for filenames with special characters like ?."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.text = "Content from file with special chars"
+        mock_get.return_value = mock_response
+
+        file_path = "path/to/file-with-question?.md"
+        result = fetch_file_content("owner", "repo", file_path, "main", "token")
+
+        self.assertEqual(result, "Content from file with special chars")
+        # Verify the URL was called with properly encoded file path
+        call_args = mock_get.call_args
+        called_url = call_args[0][0]
+        # The ? should be encoded as %3F in the URL
+        self.assertIn("file-with-question%3F.md", called_url)
+        # Make sure we're not accidentally treating ? as query parameter separator
+        self.assertNotIn("file-with-question?.md", called_url)
+
 
 class TestExtractJiraFunctions(unittest.TestCase):
     """Test cases for JIRA extraction helper functions."""
