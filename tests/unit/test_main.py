@@ -9,6 +9,7 @@ from gh_pulls_summary.main import (
     NetworkError,
     RateLimitError,
     ValidationError,
+    create_markdown_table_row,
     extract_jira_from_file_contents,
     extract_jira_issue_keys,
     fetch_file_content,
@@ -18,6 +19,7 @@ from gh_pulls_summary.main import (
     generate_markdown_output,
     generate_timestamp,
     get_authenticated_user_info,
+    get_rank_for_pr,
     main,
 )
 
@@ -1097,6 +1099,141 @@ class TestExtractJiraFunctions(unittest.TestCase):
         )  # Invalid regex
 
         self.assertEqual(result, [])
+
+
+class TestGetRankForPR(unittest.TestCase):
+    """Test cases for get_rank_for_pr function with closed issue handling."""
+
+    def test_get_rank_for_pr_prefer_open_over_closed(self):
+        """Test that open issues are preferred over closed issues for ranking."""
+        mock_jira_client = Mock()
+        mock_jira_client.get_issue_type = Mock(return_value="Feature")
+        mock_jira_client.extract_rank_value = Mock()
+
+        # Setup: ANSTRAT-1 is open with rank "0_i02v00", ANSTRAT-2 is closed with rank "0_i01v00"
+        # Even though ANSTRAT-2 has a "better" (lower) rank, ANSTRAT-1 should be preferred
+        def get_status(issue_data):
+            if issue_data["key"] == "ANSTRAT-1":
+                return "In Progress"
+            return "Closed"
+
+        def get_rank(issue_data):
+            if issue_data["key"] == "ANSTRAT-1":
+                return "0_i02v00"
+            return "0_i01v00"
+
+        mock_jira_client.get_issue_status = Mock(side_effect=get_status)
+        mock_jira_client.extract_rank_value = Mock(side_effect=get_rank)
+
+        metadata_cache = {
+            "ANSTRAT-1": {"key": "ANSTRAT-1"},
+            "ANSTRAT-2": {"key": "ANSTRAT-2"},
+        }
+
+        rank, closed_keys = get_rank_for_pr(
+            mock_jira_client, ["ANSTRAT-1", "ANSTRAT-2"], metadata_cache
+        )
+
+        # Should prefer the open issue ANSTRAT-1
+        self.assertEqual(rank, "0_i02v00 ANSTRAT-1")
+        # Should track ANSTRAT-2 as closed
+        self.assertEqual(closed_keys, {"ANSTRAT-2"})
+
+    def test_get_rank_for_pr_fallback_to_closed(self):
+        """Test that closed issues are used when no open issues have ranks."""
+        mock_jira_client = Mock()
+        mock_jira_client.get_issue_type = Mock(return_value="Feature")
+        mock_jira_client.get_issue_status = Mock(return_value="Closed")
+        mock_jira_client.extract_rank_value = Mock(return_value="0_i02v00")
+
+        metadata_cache = {
+            "ANSTRAT-1660": {"key": "ANSTRAT-1660"},
+        }
+
+        rank, closed_keys = get_rank_for_pr(
+            mock_jira_client, ["ANSTRAT-1660"], metadata_cache
+        )
+
+        # Should still return rank even though issue is closed
+        self.assertEqual(rank, "0_i02v00 ANSTRAT-1660")
+        # Should track as closed
+        self.assertEqual(closed_keys, {"ANSTRAT-1660"})
+
+    def test_get_rank_for_pr_no_closed_issues(self):
+        """Test that closed_keys is empty when all issues are open."""
+        mock_jira_client = Mock()
+        mock_jira_client.get_issue_type = Mock(return_value="Feature")
+        mock_jira_client.get_issue_status = Mock(return_value="In Progress")
+        mock_jira_client.extract_rank_value = Mock(return_value="0_i02v00")
+
+        metadata_cache = {
+            "ANSTRAT-1": {"key": "ANSTRAT-1"},
+        }
+
+        rank, closed_keys = get_rank_for_pr(
+            mock_jira_client, ["ANSTRAT-1"], metadata_cache
+        )
+
+        self.assertEqual(rank, "0_i02v00 ANSTRAT-1")
+        # Should have no closed issues
+        self.assertEqual(closed_keys, set())
+
+
+class TestMarkdownTableRowWithClosedIssues(unittest.TestCase):
+    """Test cases for strikethrough rendering of closed JIRA issues."""
+
+    def test_create_markdown_table_row_with_closed_issues(self):
+        """Test that closed JIRA issues are rendered with strikethrough."""
+        pr = {
+            "date": "2025-11-26",
+            "title": "Add proposal for nexus agent",
+            "number": 953,
+            "url": "https://github.com/ansible/handbook/pull/953",
+            "author_name": "Helen Bailey",
+            "author_url": "https://github.com/hakbailey",
+            "reviews": 2,
+            "approvals": 1,
+            "changes": 1,
+            "pr_body_urls_dict": {
+                "ANSTRAT-1660": "https://issues.redhat.com/browse/ANSTRAT-1660",
+                "ANSTRAT-1661": "https://issues.redhat.com/browse/ANSTRAT-1661",
+            },
+            "rank": "0_i02v00 ANSTRAT-1660",
+            "closed_issue_keys": {"ANSTRAT-1660"},  # Only ANSTRAT-1660 is closed
+        }
+
+        row = create_markdown_table_row(pr, url_column=True, rank_column=True)
+
+        # ANSTRAT-1660 should have strikethrough
+        self.assertIn("[~~ANSTRAT-1660~~]", row)
+        # ANSTRAT-1661 should not have strikethrough
+        self.assertIn("[ANSTRAT-1661]", row)
+        self.assertNotIn("~~ANSTRAT-1661~~", row)
+
+    def test_create_markdown_table_row_with_all_open_issues(self):
+        """Test that open JIRA issues are rendered without strikethrough."""
+        pr = {
+            "date": "2025-11-26",
+            "title": "Add proposal for nexus agent",
+            "number": 953,
+            "url": "https://github.com/ansible/handbook/pull/953",
+            "author_name": "Helen Bailey",
+            "author_url": "https://github.com/hakbailey",
+            "reviews": 2,
+            "approvals": 1,
+            "changes": 1,
+            "pr_body_urls_dict": {
+                "ANSTRAT-1660": "https://issues.redhat.com/browse/ANSTRAT-1660"
+            },
+            "rank": "0_i02v00 ANSTRAT-1660",
+            "closed_issue_keys": set(),  # No closed issues
+        }
+
+        row = create_markdown_table_row(pr, url_column=True, rank_column=True)
+
+        # ANSTRAT-1660 should not have strikethrough
+        self.assertIn("[ANSTRAT-1660]", row)
+        self.assertNotIn("~~ANSTRAT-1660~~", row)
 
 
 if __name__ == "__main__":
