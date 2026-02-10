@@ -87,6 +87,9 @@ class JiraClient:
         # Cache for ancestor chains to avoid redundant lookups
         self._ancestors_cache: dict[str, list[dict[str, Any]]] = {}
 
+        # Cache for individual issue data to avoid redundant API calls during hierarchy traversal
+        self._issue_cache: dict[str, dict[str, Any]] = {}
+
     def _make_request(
         self,
         endpoint: str,
@@ -202,6 +205,8 @@ class JiraClient:
         """
         Fetch a single JIRA issue with necessary fields for hierarchy traversal.
 
+        Uses issue cache to avoid redundant API calls.
+
         Args:
             issue_key: JIRA issue key (e.g., 'ANSTRAT-1660')
 
@@ -211,6 +216,12 @@ class JiraClient:
         Raises:
             JiraClientError: If API request fails
         """
+        # Check issue cache first
+        if issue_key in self._issue_cache:
+            cached_issue = self._issue_cache[issue_key]
+            logging.debug(f"Using cached issue data for {issue_key}")
+            return cached_issue
+
         # Discover rank field if not already known
         if self._rank_field_id is None:
             self._rank_field_id = self._discover_rank_field()
@@ -244,6 +255,10 @@ class JiraClient:
         # Enrich with rank field ID for easier access
         if self._rank_field_id:
             issue_data["_rank_field_id"] = self._rank_field_id
+
+        # Cache the issue data
+        self._issue_cache[issue_key] = issue_data
+        logging.debug(f"Cached issue data for {issue_key}")
 
         return issue_data
 
@@ -379,6 +394,12 @@ class JiraClient:
                     if self._rank_field_id:
                         issue["_rank_field_id"] = self._rank_field_id
                     metadata[issue_key] = issue
+                    # Seed the issue cache to avoid redundant API calls during hierarchy traversal
+                    self._issue_cache[issue_key] = issue
+
+            logging.debug(
+                f"Seeded issue cache with {len(metadata)} issues from batch fetch"
+            )
 
             # Log any issues that weren't found
             found_keys = set(metadata.keys())
