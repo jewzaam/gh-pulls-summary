@@ -130,7 +130,12 @@ class TestGitHubApiIntegration(IntegrationTestBase):
 
     def test_fetch_pull_requests_real_repo(self):
         """Test fetching pull requests from real repository."""
-        prs = self._safe_api_call(fetch_pull_requests, self.TEST_OWNER, self.TEST_REPO)
+        prs = self._safe_api_call(
+            fetch_pull_requests,
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            github_token=os.getenv("GITHUB_TOKEN"),
+        )
 
         self.assertIsNotNone(prs)
         self.assertIsInstance(prs, list)
@@ -258,7 +263,10 @@ class TestEndToEndIntegration(IntegrationTestBase):
         """Test processing a single pull request."""
         pr_number = self.KNOWN_PR_NUMBERS[0]
         prs, _ = fetch_and_process_pull_requests(
-            self.TEST_OWNER, self.TEST_REPO, pr_number=pr_number
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            pr_number=pr_number,
+            github_token=os.getenv("GITHUB_TOKEN"),
         )
 
         self.assertIsNotNone(prs)
@@ -273,12 +281,18 @@ class TestEndToEndIntegration(IntegrationTestBase):
         """Test draft filtering with real repository."""
         # Test no-drafts filter
         prs_no_drafts, _ = fetch_and_process_pull_requests(
-            self.TEST_OWNER, self.TEST_REPO, draft_filter="no-drafts"
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            draft_filter="no-drafts",
+            github_token=os.getenv("GITHUB_TOKEN"),
         )
 
         # Test only-drafts filter
         prs_only_drafts, _ = fetch_and_process_pull_requests(
-            self.TEST_OWNER, self.TEST_REPO, draft_filter="only-drafts"
+            self.TEST_OWNER,
+            self.TEST_REPO,
+            draft_filter="only-drafts",
+            github_token=os.getenv("GITHUB_TOKEN"),
         )
 
         # Both should be lists
@@ -311,6 +325,7 @@ class TestEndToEndIntegration(IntegrationTestBase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
             github_token = os.getenv("GITHUB_TOKEN")
 
         args = Args()
@@ -364,6 +379,7 @@ class TestRealWorldScenarios(IntegrationTestBase):
             self.TEST_REPO,
             pr_number=pr_number,
             url_from_pr_content=url_pattern,
+            github_token=os.getenv("GITHUB_TOKEN"),
         )
 
         self.assertIsNotNone(prs)
@@ -397,6 +413,7 @@ class TestRealWorldScenarios(IntegrationTestBase):
                 jira_url = None
                 jira_token = None
                 jira_rank_field = None
+                review_requested_for = None
                 github_token = os.getenv("GITHUB_TOKEN")
 
             args = Args()

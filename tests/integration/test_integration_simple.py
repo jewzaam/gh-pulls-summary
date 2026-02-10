@@ -121,6 +121,7 @@ class SimpleIntegrationTests(unittest.TestCase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
             github_token = os.getenv("GITHUB_TOKEN")
 
         try:
