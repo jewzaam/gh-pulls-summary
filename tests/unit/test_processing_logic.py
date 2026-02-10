@@ -269,6 +269,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             jira_client=None,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
             jira_include=None,
+            review_requested_for=args.review_requested_for,
             github_token=None,
         )
 
@@ -292,6 +293,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
 
         mock_fetch.return_value = (
             [
@@ -341,6 +343,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
 
         mock_fetch.return_value = (
             [

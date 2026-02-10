@@ -211,6 +211,11 @@ def parse_arguments():
         action="append",
         help="Always include this JIRA issue in the output, regardless of filters. Useful for marker stories when looking at rankings. Can be specified multiple times.",
     )
+    parser.add_argument(
+        "--review-requested-for",
+        type=str,
+        help="Filter pull requests where review is requested for this GitHub username. Only shows PRs where the specified user is in the requested reviewers list.",
+    )
 
     # Enable tab completion
     argcomplete.autocomplete(parser)
@@ -379,15 +384,62 @@ def github_api_request(
     return all_results
 
 
-def fetch_pull_requests(owner, repo, github_token=None):
+def fetch_pull_requests(owner, repo, github_token=None, review_requested_for=None):
     """
     Fetches all open pull requests for the specified repository.
+    If review_requested_for is specified, fetches all PRs and filters using Search API intersection.
+    This ensures consistent full PR objects regardless of filtering.
     """
+    headers = get_github_headers(github_token)
+
+    # Always fetch all open PRs for consistent data structure
     endpoint = f"/repos/{owner}/{repo}/pulls"
     params = {"state": "open"}
-    headers = get_github_headers(github_token)
     logging.debug(f"Fetching pull requests for {owner}/{repo}")
-    return github_api_request(endpoint, params, headers=headers)
+    all_prs = github_api_request(endpoint, params, headers=headers)
+
+    if not all_prs:
+        return []
+
+    # If review_requested_for specified, use Search API to filter
+    if review_requested_for:
+        # Use Search API to get PR numbers where review is requested
+        search_endpoint = "/search/issues"
+        query = (
+            f"is:pr is:open repo:{owner}/{repo} review-requested:{review_requested_for}"
+        )
+        search_params = {"q": query, "per_page": 100}
+        logging.debug(
+            f"Filtering pull requests for {owner}/{repo} with review-requested:{review_requested_for}"
+        )
+
+        # Collect all matching PR numbers from Search API
+        matching_pr_numbers = set()
+        page = 1
+        while True:
+            search_params["page"] = page
+            search_results = github_api_request(
+                search_endpoint, search_params, use_paging=False, headers=headers
+            )
+            if not search_results or "items" not in search_results:
+                break
+
+            items = search_results.get("items", [])
+            if not items:
+                break
+
+            for item in items:
+                matching_pr_numbers.add(item["number"])
+            page += 1
+
+        # Return intersection: PRs that are in both /pulls and search results
+        filtered_prs = [pr for pr in all_prs if pr["number"] in matching_pr_numbers]
+        logging.debug(
+            f"Filtered {len(all_prs)} PRs to {len(filtered_prs)} matching review-requested:{review_requested_for}"
+        )
+        return filtered_prs
+
+    return all_prs
 
 
 def fetch_single_pull_request(owner, repo, pr_number, github_token=None):
@@ -925,6 +977,7 @@ def fetch_and_process_pull_requests(
     jira_client=None,
     jira_issue_patterns=None,
     jira_include=None,
+    review_requested_for=None,
     github_token=None,
 ):
     """
@@ -935,6 +988,7 @@ def fetch_and_process_pull_requests(
     Args:
         jira_issue_patterns: List of regex patterns to extract JIRA issue keys from file contents
         jira_include: List of JIRA issue keys to always include in the output
+        review_requested_for: GitHub username to filter PRs by requested reviewer
 
     Returns:
         Tuple of (pull_requests, jira_issues) where:
@@ -953,8 +1007,9 @@ def fetch_and_process_pull_requests(
             return []
         prs = [pr]  # Wrap in a list for consistent processing
     else:
-        # Fetch all PRs
-        prs = fetch_pull_requests(owner, repo, github_token)
+        # Fetch all PRs (filtered by review_requested_for if specified)
+        # Always returns full PR objects with consistent structure
+        prs = fetch_pull_requests(owner, repo, github_token, review_requested_for)
         if prs is None:
             logging.error("Failed to fetch pull requests")
             return []
@@ -1442,6 +1497,7 @@ def generate_markdown_output(args):
         jira_client=jira_client,
         jira_issue_patterns=jira_issue_patterns,
         jira_include=args.jira_include,
+        review_requested_for=args.review_requested_for,
         github_token=github_token,
     )
 

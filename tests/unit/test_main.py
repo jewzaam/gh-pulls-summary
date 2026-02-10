@@ -57,6 +57,7 @@ class TestMainFunction(unittest.TestCase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
 
         args = Args()
         # Patch fetch_and_process_pull_requests to avoid network
@@ -122,6 +123,7 @@ class TestMainFunction(unittest.TestCase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
 
         args = Args()
         with patch(
@@ -173,6 +175,7 @@ class TestMainFunction(unittest.TestCase):
             jira_url = None
             jira_token = None
             jira_rank_field = None
+            review_requested_for = None
 
         args = Args()
         with patch(
