@@ -119,6 +119,40 @@ class TestArgumentParsing(unittest.TestCase):
         self.assertEqual(args.repo, "repo")
         self.assertIsNone(args.jira_include)
 
+    @patch(
+        "sys.argv",
+        [
+            "gh_pulls_summary.py",
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+            "--review-requested-for",
+            "testuser",
+        ],
+    )
+    def test_parse_arguments_with_review_requested_for(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.review_requested_for, "testuser")
+
+    @patch(
+        "sys.argv",
+        [
+            "gh_pulls_summary.py",
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+        ],
+    )
+    def test_parse_arguments_without_review_requested_for(self):
+        args = parse_arguments()
+        self.assertEqual(args.owner, "owner")
+        self.assertEqual(args.repo, "repo")
+        self.assertIsNone(args.review_requested_for)
+
 
 if __name__ == "__main__":
     unittest.main()

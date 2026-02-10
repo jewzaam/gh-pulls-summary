@@ -20,6 +20,7 @@ This repository, including all code, tests, and documentation, was created with 
 
 - **PR Fetching**: Fetch pull requests from public or private repositories
 - **Draft Filtering**: Filter by draft status (`only-drafts`, `no-drafts`, or no filter)
+- **Review Requested Filtering**: Filter PRs where review is requested for a specific user
 - **File Filtering**: Regex patterns to include/exclude PRs by changed file paths
 - **URL Extraction**: Extract URLs from PR diffs using regex patterns
 - **Flexible Output**: Markdown table format with customizable column titles and sorting
@@ -167,6 +168,7 @@ gh-pulls-summary --owner microsoft --repo vscode
 - `--github-token`: GitHub personal access token (or `GITHUB_TOKEN` env var)
 - `--pr-number`: Query a single PR by number
 - `--draft-filter`: Filter by draft status (`only-drafts` or `no-drafts`)
+- `--review-requested-for`: Filter PRs where review is requested for a specific GitHub username (fetches all PRs, filters using Search API intersection)
 - `--file-include`: Regex pattern to include PRs by changed files (repeatable)
 - `--file-exclude`: Regex pattern to exclude PRs by changed files (repeatable)
 - `--url-from-pr-content`: Regex to extract URLs from PR diffs
@@ -186,6 +188,11 @@ gh-pulls-summary --owner microsoft --repo vscode
 ```bash
 # Filter to non-draft PRs only
 gh-pulls-summary --owner myorg --repo myrepo --draft-filter no-drafts
+
+# Filter PRs where review is requested for a specific user
+# Fetches all PRs then filters using Search API intersection (2 API calls)
+# Always returns full PR objects with consistent data structure
+gh-pulls-summary --owner myorg --repo myrepo --review-requested-for username
 
 # Extract URLs and save to file
 gh-pulls-summary --owner myorg --repo myrepo \
