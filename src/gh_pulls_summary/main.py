@@ -212,6 +212,18 @@ def parse_arguments():
         help="Always include this JIRA issue in the output, regardless of filters. Useful for marker stories when looking at rankings. Can be specified multiple times.",
     )
     parser.add_argument(
+        "--jira-metadata-row-pattern",
+        type=str,
+        default=r"feature\s*/?\s*initiative",
+        help="Regex pattern to identify the metadata table row containing primary JIRA issue (case-insensitive). Default is 'feature\\s*/?\\s*initiative' to match rows like '| **Feature / Initiative** | [ANSTRAT-1234](...) |'.",
+    )
+    parser.add_argument(
+        "--jira-metadata-row-search-depth",
+        type=int,
+        default=50,
+        help="Number of lines to search from the top of PR body and proposal files for metadata table. Use -1 to search entire files. Default is 50.",
+    )
+    parser.add_argument(
         "--review-requested-for",
         type=str,
         help="Filter pull requests where review is requested for this GitHub username. Only shows PRs where the specified user is in the requested reviewers list.",
@@ -650,32 +662,46 @@ def extract_jira_issue_keys(url_dict: dict, pattern: str) -> list[str]:
     return sorted(issue_keys)
 
 
-def extract_primary_jira_from_metadata(pr_body: str, patterns: list[str]) -> list[str]:
+def extract_primary_jira_from_metadata(
+    content: str,
+    patterns: list[str],
+    row_pattern: str,
+    search_depth: int,
+) -> list[str]:
     """
-    Extract primary JIRA issues from PR metadata table.
+    Extract primary JIRA issues from metadata table.
 
-    Looks for a markdown table in the first 50 lines with a row like:
+    Looks for a markdown table with a row matching the specified pattern, e.g.:
     | **Feature / Initiative** | [ANSTRAT-1586](url) |
 
     Args:
-        pr_body: The PR body/description text
+        content: Text content to search (PR body or file content)
         patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)"])
+        row_pattern: Regex pattern to identify the metadata row (case-insensitive)
+        search_depth: Number of lines to search from the top (-1 for unlimited)
 
     Returns:
         List of JIRA issue keys found in metadata table, or empty list if none found
     """
-    if not pr_body or not patterns:
+    if not content or not patterns:
         return []
 
-    # Look only at first 50 lines
-    lines = pr_body.split("\n")[:50]
+    # Limit lines based on search depth
+    if search_depth < 0:
+        lines = content.split("\n")
+    else:
+        lines = content.split("\n")[:search_depth]
 
-    # Look for the "Feature / Initiative" row in a markdown table (case-insensitive)
-    feature_initiative_pattern = re.compile(r"feature\s*/?\s*initiative", re.IGNORECASE)
+    # Compile the row pattern (case-insensitive)
+    try:
+        metadata_row_regex = re.compile(row_pattern, re.IGNORECASE)
+    except re.error as e:
+        logging.warning(f"Invalid metadata row pattern '{row_pattern}': {e}")
+        return []
 
     for line in lines:
-        # Check if this line contains the Feature/Initiative marker
-        if feature_initiative_pattern.search(line):
+        # Check if this line contains the metadata row marker
+        if metadata_row_regex.search(line):
             # Collect all unique matches from all patterns
             all_matches = []
             for pattern in patterns:
@@ -696,7 +722,49 @@ def extract_primary_jira_from_metadata(pr_body: str, patterns: list[str]) -> lis
                 )
                 return unique_issues
 
-    logging.debug("No primary JIRA issues found in PR metadata table")
+    logging.debug("No primary JIRA issues found in metadata table")
+    return []
+
+
+def extract_primary_jira_from_file_contents(
+    file_contents: list[str],
+    patterns: list[str],
+    row_pattern: str,
+    search_depth: int,
+) -> list[str]:
+    """
+    Extract primary JIRA issues from metadata tables in file contents.
+
+    Searches each file for a markdown table with a row matching the specified pattern.
+    Returns the first match found across all files.
+
+    Args:
+        file_contents: List of file content strings to search
+        patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)"])
+        row_pattern: Regex pattern to identify the metadata row (case-insensitive)
+        search_depth: Number of lines to search from the top of each file (-1 for unlimited)
+
+    Returns:
+        List of JIRA issue keys found in metadata table, or empty list if none found
+    """
+    if not file_contents or not patterns:
+        return []
+
+    for content in file_contents:
+        if not content:
+            continue
+
+        # Check this file's content for metadata table
+        primary_issues = extract_primary_jira_from_metadata(
+            content, patterns, row_pattern, search_depth
+        )
+        if primary_issues:
+            logging.info(
+                f"Found primary JIRA issues in file metadata table: {', '.join(primary_issues)}"
+            )
+            return primary_issues
+
+    logging.debug("No primary JIRA issues found in file metadata tables")
     return []
 
 
@@ -739,19 +807,24 @@ def extract_jira_from_file_contents(
 def extract_issue_keys_from_pr(
     file_contents: list[str],
     issue_patterns: list[str],
-    pr_body: str | None = None,
+    pr_body: str | None,
+    metadata_row_pattern: str,
+    metadata_search_depth: int,
 ) -> list[str]:
     """
     Extract JIRA issue keys from a PR without fetching metadata.
 
-    Extraction strategy:
-    1. First checks PR metadata table (first 50 lines, "Feature / Initiative" row)
-    2. Falls back to searching full file contents if metadata extraction fails
+    Extraction strategy (priority order):
+    1. First checks PR body metadata table (searching N lines for metadata row pattern)
+    2. Then checks file contents for metadata tables (searching N lines of each file)
+    3. Falls back to searching full file contents if no metadata tables found
 
     Args:
         file_contents: List of file content strings to search for JIRA issues
         issue_patterns: List of regex patterns to extract issue keys
         pr_body: PR body/description text (optional)
+        metadata_row_pattern: Regex pattern to identify metadata row (case-insensitive)
+        metadata_search_depth: Number of lines to search from top (-1 for unlimited)
 
     Returns:
         List of JIRA issue keys found
@@ -759,19 +832,31 @@ def extract_issue_keys_from_pr(
     if not issue_patterns:
         return []
 
-    # First, try to extract primary issues from PR metadata table
+    # Priority 1: Try to extract primary issues from PR body metadata table
     issue_keys = []
     if pr_body:
-        primary_issues = extract_primary_jira_from_metadata(pr_body, issue_patterns)
+        primary_issues = extract_primary_jira_from_metadata(
+            pr_body, issue_patterns, metadata_row_pattern, metadata_search_depth
+        )
         if primary_issues:
             issue_keys = primary_issues
-            logging.debug(f"Found JIRA issues in metadata: {', '.join(primary_issues)}")
+            logging.debug(f"Found JIRA issues in PR body metadata: {', '.join(primary_issues)}")
+            return issue_keys
 
-    # Fall back to extracting from full file contents if no metadata found
-    if not issue_keys:
-        issue_keys = extract_jira_from_file_contents(file_contents, issue_patterns)
-        if issue_keys:
-            logging.debug(f"Found JIRA issues in file contents: {issue_keys}")
+    # Priority 2: Try to extract primary issues from file contents metadata tables
+    if file_contents:
+        primary_issues = extract_primary_jira_from_file_contents(
+            file_contents, issue_patterns, metadata_row_pattern, metadata_search_depth
+        )
+        if primary_issues:
+            issue_keys = primary_issues
+            logging.debug(f"Found JIRA issues in file metadata: {', '.join(primary_issues)}")
+            return issue_keys
+
+    # Priority 3: Fall back to extracting from full file contents
+    issue_keys = extract_jira_from_file_contents(file_contents, issue_patterns)
+    if issue_keys:
+        logging.debug(f"Found JIRA issues in file contents (no metadata): {issue_keys}")
 
     return issue_keys
 
@@ -977,6 +1062,8 @@ def fetch_and_process_pull_requests(
     jira_client=None,
     jira_issue_patterns=None,
     jira_include=None,
+    jira_metadata_row_pattern=None,
+    jira_metadata_search_depth=None,
     review_requested_for=None,
     github_token=None,
 ):
@@ -988,6 +1075,8 @@ def fetch_and_process_pull_requests(
     Args:
         jira_issue_patterns: List of regex patterns to extract JIRA issue keys from file contents
         jira_include: List of JIRA issue keys to always include in the output
+        jira_metadata_row_pattern: Regex pattern to identify metadata row (case-insensitive)
+        jira_metadata_search_depth: Number of lines to search from top (-1 for unlimited)
         review_requested_for: GitHub username to filter PRs by requested reviewer
 
     Returns:
@@ -1071,7 +1160,11 @@ def fetch_and_process_pull_requests(
 
             # Extract issue keys for this PR
             issue_keys = extract_issue_keys_from_pr(
-                file_contents_list, jira_issue_patterns, pr_body
+                file_contents_list,
+                jira_issue_patterns,
+                pr_body,
+                jira_metadata_row_pattern,
+                jira_metadata_search_depth,
             )
             if issue_keys:
                 pr_issue_keys_map[pr_number] = issue_keys
@@ -1497,6 +1590,8 @@ def generate_markdown_output(args):
         jira_client=jira_client,
         jira_issue_patterns=jira_issue_patterns,
         jira_include=args.jira_include,
+        jira_metadata_row_pattern=args.jira_metadata_row_pattern,
+        jira_metadata_search_depth=args.jira_metadata_row_search_depth,
         review_requested_for=args.review_requested_for,
         github_token=github_token,
     )
