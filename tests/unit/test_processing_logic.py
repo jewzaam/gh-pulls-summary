@@ -269,6 +269,8 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             jira_client=None,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
             jira_include=None,
+            jira_metadata_row_pattern=args.jira_metadata_row_pattern,
+            jira_metadata_search_depth=args.jira_metadata_row_search_depth,
             review_requested_for=args.review_requested_for,
             github_token=None,
         )
@@ -289,6 +291,8 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
             jira_include = None
+            jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
+            jira_metadata_row_search_depth = 50
             github_token = None
             jira_url = None
             jira_token = None
@@ -339,6 +343,8 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
             jira_include = None
+            jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
+            jira_metadata_row_search_depth = 50
             github_token = None
             jira_url = None
             jira_token = None

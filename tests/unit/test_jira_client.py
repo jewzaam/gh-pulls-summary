@@ -540,7 +540,9 @@ class TestMetadataExtraction(unittest.TestCase):
 
 Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-1234) references.
 """
-        issues = extract_primary_jira_from_metadata(pr_body, [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         self.assertEqual(issues, ["ANSTRAT-1586"])
 
     def test_extract_primary_jira_no_spaces(self):
@@ -548,7 +550,9 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
         pr_body = "|**Feature/Initiative**|[ANSTRAT-1738](https://issues.redhat.com/browse/ANSTRAT-1738)|"
-        issues = extract_primary_jira_from_metadata(pr_body, [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         self.assertEqual(issues, ["ANSTRAT-1738"])
 
     def test_extract_primary_jira_not_found(self):
@@ -556,14 +560,18 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
         pr_body = "Some PR body without metadata table"
-        issues = extract_primary_jira_from_metadata(pr_body, [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         self.assertEqual(issues, [])
 
     def test_extract_primary_jira_empty_body(self):
         """Test with empty PR body."""
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
-        issues = extract_primary_jira_from_metadata("", [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            "", [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         self.assertEqual(issues, [])
 
     def test_extract_primary_jira_beyond_50_lines(self):
@@ -575,7 +583,9 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
             "\n".join(["line"] * 60)
             + "\n| **Feature / Initiative** | [ANSTRAT-1586](url) |"
         )
-        issues = extract_primary_jira_from_metadata(pr_body, [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         self.assertEqual(issues, [])
 
     def test_extract_primary_jira_multiple_patterns(self):
@@ -584,7 +594,10 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
 
         pr_body = "| **Feature / Initiative** | [OTHERJIRA-5678](url) |"
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)", r"(OTHERJIRA-\d+)"]
+            pr_body,
+            [r"(ANSTRAT-\d+)", r"(OTHERJIRA-\d+)"],
+            r"feature\s*/?\s*initiative",
+            50,
         )
         # Should find the OTHERJIRA issue using the second pattern
         self.assertEqual(issues, ["OTHERJIRA-5678"])
@@ -596,7 +609,9 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         pr_body = (
             "| **Feature / Initiative** | [ANSTRAT-1567](url1), [ANSTRAT-1738](url2) |"
         )
-        issues = extract_primary_jira_from_metadata(pr_body, [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         # Should find both issues
         self.assertEqual(issues, ["ANSTRAT-1567", "ANSTRAT-1738"])
 
@@ -605,7 +620,9 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
         pr_body = "| **FEATURE / INITIATIVE** | [ANSTRAT-9999](url) |"
-        issues = extract_primary_jira_from_metadata(pr_body, [r"(ANSTRAT-\d+)"])
+        issues = extract_primary_jira_from_metadata(
+            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+        )
         self.assertEqual(issues, ["ANSTRAT-9999"])
 
 
@@ -689,6 +706,8 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
             file_include=file_include,
             jira_client=jira_client,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -753,6 +772,8 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
             file_include=file_include,
             jira_client=jira_client,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -813,6 +834,8 @@ class TestJiraInclude(unittest.TestCase):
             jira_client=jira_client,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
             jira_include=["ANSTRAT-1234"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -890,6 +913,8 @@ class TestJiraInclude(unittest.TestCase):
             jira_client=jira_client,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
             jira_include=["ANSTRAT-1234"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -945,6 +970,8 @@ class TestJiraInclude(unittest.TestCase):
             jira_client=jira_client,
             jira_issue_patterns=[r"(ANSTRAT-\d+)"],
             jira_include=["ANSTRAT-9999"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -1066,6 +1093,8 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
             "repo",
             jira_client=jira_client,
             jira_issue_patterns=[r"(AAP-\d+)", r"(ANSTRAT-\d+)"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -1184,6 +1213,8 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
             "repo",
             jira_client=jira_client,
             jira_issue_patterns=[r"(STORY-\d+)", r"(FEATURE-\d+)", r"(INITIATIVE-\d+)"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
@@ -1270,6 +1301,8 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
             "repo",
             jira_client=jira_client,
             jira_issue_patterns=[r"(TASK-\d+)"],
+            jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
+            jira_metadata_search_depth=50,
             github_token="test_token",
         )
 
