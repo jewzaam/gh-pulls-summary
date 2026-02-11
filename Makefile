@@ -9,9 +9,10 @@ include make/common.mk
 include make/env.mk
 include make/test.mk
 include make/lint.mk
+include make/typecheck.mk
 
-.DEFAULT_GOAL := help
-.PHONY: help
+.DEFAULT_GOAL := default
+.PHONY: help default
 
 help: ## Display this help message
 	@echo "GitHub Pull Requests Summary Tool"
@@ -20,3 +21,6 @@ help: ## Display this help message
 	@echo "Available targets:"
 	@echo ""
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+default: format lint typecheck test-unit coverage ## Run all validation steps (format, lint, typecheck, test, coverage)
+	@printf "$(GREEN)✅ All validation steps passed$(RESET)\n"
