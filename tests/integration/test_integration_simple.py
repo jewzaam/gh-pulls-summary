@@ -118,6 +118,8 @@ class SimpleIntegrationTests(unittest.TestCase):
             include_rank = False
             jira_issue_pattern = r"(ANSTRAT-\d+)"
             jira_include = None
+            jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
+            jira_metadata_row_search_depth = 50
             jira_url = None
             jira_token = None
             jira_rank_field = None

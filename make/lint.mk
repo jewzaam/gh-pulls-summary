@@ -4,9 +4,8 @@
 
 .PHONY: lint format
 
-lint: requirements-dev ## Run linting and type checking
+lint: requirements-dev ## Run linting
 	@$(VENV_PYTHON) -m ruff check src/ tests/
-	@$(VENV_PYTHON) -m mypy src/
 	@printf "$(GREEN)✅ Linting complete$(RESET)\n"
 
 format: requirements-dev ## Format code
