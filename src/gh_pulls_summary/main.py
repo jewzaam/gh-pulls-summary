@@ -840,7 +840,9 @@ def extract_issue_keys_from_pr(
         )
         if primary_issues:
             issue_keys = primary_issues
-            logging.debug(f"Found JIRA issues in PR body metadata: {', '.join(primary_issues)}")
+            logging.debug(
+                f"Found JIRA issues in PR body metadata: {', '.join(primary_issues)}"
+            )
             return issue_keys
 
     # Priority 2: Try to extract primary issues from file contents metadata tables
@@ -850,7 +852,9 @@ def extract_issue_keys_from_pr(
         )
         if primary_issues:
             issue_keys = primary_issues
-            logging.debug(f"Found JIRA issues in file metadata: {', '.join(primary_issues)}")
+            logging.debug(
+                f"Found JIRA issues in file metadata: {', '.join(primary_issues)}"
+            )
             return issue_keys
 
     # Priority 3: Fall back to extracting from full file contents
