@@ -1681,7 +1681,10 @@ def generate_markdown_output(args):
             return rank_value
         return pr.get(key, "")
 
-    sorted_prs = sorted(pull_requests, key=sort_key)
+    # Two-phase sort: first by PR number (ascending) for stable baseline,
+    # then by the requested column (stable sort preserves PR number order for ties)
+    pr_number_sorted = sorted(pull_requests, key=lambda pr: pr.get("number") or 0)
+    sorted_prs = sorted(pr_number_sorted, key=sort_key)
 
     # Add data rows
     for pr in sorted_prs:
