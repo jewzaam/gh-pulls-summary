@@ -225,6 +225,88 @@ class TestMainFunction(unittest.TestCase):
         )
         self.assertEqual(markdown_output, expected_output)
 
+    def test_generate_markdown_output_sort_tiebreak_by_pr_number(self):
+        """Test that PRs with the same sort key are ordered by PR number ascending."""
+
+        class Args:
+            owner = "owner"
+            repo = "repo"
+            draft_filter = None
+            debug = False
+            pr_number = None
+            file_include = None
+            file_exclude = None
+            url_from_pr_content = None
+            column_title = None
+            sort_column = "date"
+            include_rank = False
+            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_include = None
+            jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
+            jira_metadata_row_search_depth = 50
+            github_token = None
+            jira_url = None
+            jira_token = None
+            jira_rank_field = None
+            review_requested_for = None
+
+        args = Args()
+        with patch(
+            "gh_pulls_summary.main.fetch_and_process_pull_requests"
+        ) as mock_fetch:
+            # All three PRs have the same date; input order has highest PR# first
+            mock_fetch.return_value = (
+                [
+                    {
+                        "date": "2025-05-01",
+                        "title": "Third PR",
+                        "number": 130,
+                        "url": "https://github.com/owner/repo/pull/130",
+                        "author_name": "Alice",
+                        "author_url": "https://github.com/alice",
+                        "reviews": 1,
+                        "approvals": 1,
+                        "changes": 0,
+                        "pr_body_urls_dict": {},
+                    },
+                    {
+                        "date": "2025-05-01",
+                        "title": "First PR",
+                        "number": 120,
+                        "url": "https://github.com/owner/repo/pull/120",
+                        "author_name": "Bob",
+                        "author_url": "https://github.com/bob",
+                        "reviews": 1,
+                        "approvals": 1,
+                        "changes": 0,
+                        "pr_body_urls_dict": {},
+                    },
+                    {
+                        "date": "2025-05-01",
+                        "title": "Second PR",
+                        "number": 125,
+                        "url": "https://github.com/owner/repo/pull/125",
+                        "author_name": "Charlie",
+                        "author_url": "https://github.com/charlie",
+                        "reviews": 1,
+                        "approvals": 1,
+                        "changes": 0,
+                        "pr_body_urls_dict": {},
+                    },
+                ],
+                {},
+            )
+            markdown_output = generate_markdown_output(args)
+        # With same date, PRs should be ordered by PR number ascending: 120, 125, 130
+        expected_output = (
+            "| Date 🔽 | Title | Author | Change Requested | Approvals |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            "| 2025-05-01 | First PR #[120](https://github.com/owner/repo/pull/120) | [Bob](https://github.com/bob) | 0 | 1 of 1 |\n"
+            "| 2025-05-01 | Second PR #[125](https://github.com/owner/repo/pull/125) | [Charlie](https://github.com/charlie) | 0 | 1 of 1 |\n"
+            "| 2025-05-01 | Third PR #[130](https://github.com/owner/repo/pull/130) | [Alice](https://github.com/alice) | 0 | 1 of 1 |"
+        )
+        self.assertEqual(markdown_output, expected_output)
+
     @patch("gh_pulls_summary.main.generate_markdown_output")
     @patch("gh_pulls_summary.main.generate_timestamp")
     @patch("gh_pulls_summary.main.parse_arguments")
