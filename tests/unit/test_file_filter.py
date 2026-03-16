@@ -61,7 +61,7 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
 
         # Verify results
         self.assertEqual(len(pull_requests), 1)
-        self.assertEqual(pull_requests[0]["number"], 1)
+        self.assertEqual(pull_requests[0].number, 1)
 
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_pr_files")
@@ -118,7 +118,7 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
 
         # Verify results
         self.assertEqual(len(pull_requests), 1)
-        self.assertEqual(pull_requests[0]["number"], 1)
+        self.assertEqual(pull_requests[0].number, 1)
 
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_pr_files")
@@ -186,7 +186,7 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
         # Verify results
         self.assertEqual(len(pull_requests), 1)
         self.assertEqual(
-            pull_requests[0]["number"], 1
+            pull_requests[0].number, 1
         )  # PR 1 is included, PR 2 and PR 3 are excluded
 
 

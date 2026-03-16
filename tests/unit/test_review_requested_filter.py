@@ -47,8 +47,8 @@ class TestReviewRequestedFilter(unittest.TestCase):
 
         # Verify results - only PR 1 should be included
         self.assertEqual(len(pull_requests), 1)
-        self.assertEqual(pull_requests[0]["number"], 1)
-        self.assertEqual(pull_requests[0]["title"], "Fix bug")
+        self.assertEqual(pull_requests[0].number, 1)
+        self.assertEqual(pull_requests[0].title, "Fix bug")
 
         # Verify fetch_pull_requests was called with review_requested_for parameter
         mock_fetch_pull_requests.assert_called_once_with(

@@ -7,6 +7,7 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
+from gh_pulls_summary.common import JiraIssueData, PullRequestData
 from gh_pulls_summary.jira_client import (
     JiraAuthenticationError,
     JiraClient,
@@ -791,8 +792,8 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
 
         # Verify results include rank
         self.assertEqual(len(pull_requests), 1)
-        self.assertIn("rank", pull_requests[0])
-        self.assertIn("PROJ-1234", pull_requests[0]["rank"])
+        self.assertIsNotNone(pull_requests[0].rank)
+        self.assertIn("PROJ-1234", pull_requests[0].rank)
 
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_reviews")
@@ -920,9 +921,9 @@ class TestJiraInclude(unittest.TestCase):
         self.assertIn("PROJ-1234", jira_issues)
         # Verify JIRA data is populated correctly
         jira_data = jira_issues["PROJ-1234"]
-        self.assertIsNotNone(jira_data["title"])
-        self.assertIn("browse/PROJ-1234", jira_data["url"])
-        self.assertIn("PROJ-1234", jira_data["rank"])
+        self.assertIsNotNone(jira_data.title)
+        self.assertIn("browse/PROJ-1234", jira_data.url)
+        self.assertIn("PROJ-1234", jira_data.rank)
 
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_reviews")
@@ -993,8 +994,8 @@ class TestJiraInclude(unittest.TestCase):
 
         # Verify only one entry (the PR, not a duplicate synthetic entry)
         self.assertEqual(len(pull_requests), 1)
-        self.assertEqual(pull_requests[0]["number"], 1)
-        self.assertIn("PROJ-1234", pull_requests[0]["rank"])
+        self.assertEqual(pull_requests[0].number, 1)
+        self.assertIn("PROJ-1234", pull_requests[0].rank)
 
     @patch("gh_pulls_summary.main.fetch_reviews")
     @patch("gh_pulls_summary.main.fetch_user_details")
@@ -1176,9 +1177,9 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
 
         # Verify: PR should have rank from PROJ-1780 (the Feature ancestor)
         pr = pull_requests[0]
-        self.assertIsNotNone(pr.get("rank"))
-        self.assertIn("PROJ-1780", pr["rank"])
-        self.assertIn("0|i00xyz:a", pr["rank"].replace("_", "|"))
+        self.assertIsNotNone(pr.rank)
+        self.assertIn("PROJ-1780", pr.rank)
+        self.assertIn("0|i00xyz:a", pr.rank.replace("_", "|"))
 
         # Verify: get_ancestors was called for CHILD-60030
         jira_client.get_ancestors.assert_called()
@@ -1295,9 +1296,9 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
         pr = pull_requests[0]
 
         # Should use FEATURE-200 (first Feature/Initiative in hierarchy), not INITIATIVE-300
-        self.assertIsNotNone(pr.get("rank"))
-        self.assertIn("FEATURE-200", pr["rank"])
-        self.assertIn("0|i00aaa:a", pr["rank"].replace("_", "|"))
+        self.assertIsNotNone(pr.rank)
+        self.assertIn("FEATURE-200", pr.rank)
+        self.assertIn("0|i00aaa:a", pr.rank.replace("_", "|"))
 
     @patch("gh_pulls_summary.main.fetch_user_details")
     @patch("gh_pulls_summary.main.fetch_reviews")
@@ -1384,7 +1385,7 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
 
         # Should have no rank (no Feature/Initiative in hierarchy)
         # Empty string is used instead of None for easier markdown formatting
-        self.assertEqual(pr.get("rank"), "")
+        self.assertEqual(pr.rank, "")
 
 
 class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
@@ -1395,28 +1396,27 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
         from gh_pulls_summary.main import create_markdown_table_row
 
         # Synthetic JIRA entry (no PR number, has jira_key reference)
-        synthetic_pr = {
-            "date": "",
-            "title": None,
-            "number": None,
-            "url": None,
-            "jira_key": "PROJ-1234",
-            "author_name": "",
-            "author_url": "",
-            "reviews": 0,
-            "approvals": 0,
-            "changes": "",
-            "pr_body_urls_dict": {},
-            "rank": "0_i00001 PROJ-1234",
-        }
+        synthetic_pr = PullRequestData(
+            date="",
+            title=None,
+            number=None,
+            url=None,
+            jira_key="PROJ-1234",
+            author_name="",
+            author_url="",
+            reviews=0,
+            approvals=0,
+            changes="",
+            rank="0_i00001 PROJ-1234",
+        )
 
         # JIRA issues dict
         jira_issues = {
-            "PROJ-1234": {
-                "title": "Implement feature XYZ",
-                "url": "https://issues.example.com/browse/PROJ-1234",
-                "rank": "0_i00001 PROJ-1234",
-            }
+            "PROJ-1234": JiraIssueData(
+                title="Implement feature XYZ",
+                url="https://issues.example.com/browse/PROJ-1234",
+                rank="0_i00001 PROJ-1234",
+            )
         }
 
         row = create_markdown_table_row(
@@ -1440,19 +1440,18 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
         from gh_pulls_summary.main import create_markdown_table_row
 
         # Normal PR entry
-        normal_pr = {
-            "date": "2025-01-08",
-            "title": "Add feature",
-            "number": 123,
-            "url": "https://github.com/owner/repo/pull/123",
-            "author_name": "John Doe",
-            "author_url": "https://github.com/johndoe",
-            "reviews": 2,
-            "approvals": 2,
-            "changes": 0,
-            "pr_body_urls_dict": {},
-            "rank": "0_i00002 PROJ-5678",
-        }
+        normal_pr = PullRequestData(
+            date="2025-01-08",
+            title="Add feature",
+            number=123,
+            url="https://github.com/owner/repo/pull/123",
+            author_name="John Doe",
+            author_url="https://github.com/johndoe",
+            reviews=2,
+            approvals=2,
+            changes=0,
+            rank="0_i00002 PROJ-5678",
+        )
 
         row = create_markdown_table_row(
             normal_pr, url_column=False, rank_column=True, jira_issues=None

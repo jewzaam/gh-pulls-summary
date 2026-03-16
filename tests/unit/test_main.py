@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, Mock, patch
 
+from gh_pulls_summary.common import PullRequestData
 from gh_pulls_summary.main import (
     GitHubAPIError,
     NetworkError,
@@ -69,30 +70,30 @@ class TestMainFunction(unittest.TestCase):
         ) as mock_fetch:
             mock_fetch.return_value = (
                 [
-                    {
-                        "date": "2025-05-02",
-                        "title": "Fix bug Y",
-                        "number": 124,
-                        "url": "https://github.com/owner/repo/pull/124",
-                        "author_name": "Jane Smith",
-                        "author_url": "https://github.com/janesmith",
-                        "reviews": 1,
-                        "approvals": 1,
-                        "changes": 0,
-                        "pr_body_urls_dict": {},
-                    },
-                    {
-                        "date": "2025-05-01",
-                        "title": "Add feature X",
-                        "number": 123,
-                        "url": "https://github.com/owner/repo/pull/123",
-                        "author_name": "John Doe",
-                        "author_url": "https://github.com/johndoe",
-                        "reviews": 2,
-                        "approvals": 2,
-                        "changes": 1,
-                        "pr_body_urls_dict": {},
-                    },
+                    PullRequestData(
+                        date="2025-05-02",
+                        title="Fix bug Y",
+                        number=124,
+                        url="https://github.com/owner/repo/pull/124",
+                        author_name="Jane Smith",
+                        author_url="https://github.com/janesmith",
+                        reviews=1,
+                        approvals=1,
+                        changes=0,
+                        pr_body_urls_dict={},
+                    ),
+                    PullRequestData(
+                        date="2025-05-01",
+                        title="Add feature X",
+                        number=123,
+                        url="https://github.com/owner/repo/pull/123",
+                        author_name="John Doe",
+                        author_url="https://github.com/johndoe",
+                        reviews=2,
+                        approvals=2,
+                        changes=1,
+                        pr_body_urls_dict={},
+                    ),
                 ],
                 {},  # Empty jira_issues dict
             )
@@ -137,18 +138,18 @@ class TestMainFunction(unittest.TestCase):
         ) as mock_fetch:
             mock_fetch.return_value = (
                 [
-                    {
-                        "date": "2025-05-01",
-                        "title": "Add feature X",
-                        "number": 123,
-                        "url": "https://github.com/owner/repo/pull/123",
-                        "author_name": "John Doe",
-                        "author_url": "https://github.com/johndoe",
-                        "reviews": 2,
-                        "approvals": 2,
-                        "changes": 1,
-                        "pr_body_urls_dict": {},
-                    }
+                    PullRequestData(
+                        date="2025-05-01",
+                        title="Add feature X",
+                        number=123,
+                        url="https://github.com/owner/repo/pull/123",
+                        author_name="John Doe",
+                        author_url="https://github.com/johndoe",
+                        reviews=2,
+                        approvals=2,
+                        changes=1,
+                        pr_body_urls_dict={},
+                    )
                 ],
                 {},  # Empty jira_issues dict
             )
@@ -192,30 +193,30 @@ class TestMainFunction(unittest.TestCase):
         ) as mock_fetch:
             mock_fetch.return_value = (
                 [
-                    {
-                        "date": "2025-05-01",
-                        "title": "Add feature X",
-                        "number": 123,
-                        "url": "https://github.com/owner/repo/pull/123",
-                        "author_name": "John Doe",
-                        "author_url": "https://github.com/johndoe",
-                        "reviews": 2,
-                        "approvals": 2,
-                        "changes": 1,
-                        "pr_body_urls_dict": {},
-                    },
-                    {
-                        "date": "2025-05-02",
-                        "title": "Fix bug Y",
-                        "number": 124,
-                        "url": "https://github.com/owner/repo/pull/124",
-                        "author_name": "Jane Smith",
-                        "author_url": "https://github.com/janesmith",
-                        "reviews": 1,
-                        "approvals": 1,
-                        "changes": 0,
-                        "pr_body_urls_dict": {},
-                    },
+                    PullRequestData(
+                        date="2025-05-01",
+                        title="Add feature X",
+                        number=123,
+                        url="https://github.com/owner/repo/pull/123",
+                        author_name="John Doe",
+                        author_url="https://github.com/johndoe",
+                        reviews=2,
+                        approvals=2,
+                        changes=1,
+                        pr_body_urls_dict={},
+                    ),
+                    PullRequestData(
+                        date="2025-05-02",
+                        title="Fix bug Y",
+                        number=124,
+                        url="https://github.com/owner/repo/pull/124",
+                        author_name="Jane Smith",
+                        author_url="https://github.com/janesmith",
+                        reviews=1,
+                        approvals=1,
+                        changes=0,
+                        pr_body_urls_dict={},
+                    ),
                 ],
                 {},  # Empty jira_issues dict
             )
@@ -261,42 +262,42 @@ class TestMainFunction(unittest.TestCase):
             # All three PRs have the same date; input order has highest PR# first
             mock_fetch.return_value = (
                 [
-                    {
-                        "date": "2025-05-01",
-                        "title": "Third PR",
-                        "number": 130,
-                        "url": "https://github.com/owner/repo/pull/130",
-                        "author_name": "Alice",
-                        "author_url": "https://github.com/alice",
-                        "reviews": 1,
-                        "approvals": 1,
-                        "changes": 0,
-                        "pr_body_urls_dict": {},
-                    },
-                    {
-                        "date": "2025-05-01",
-                        "title": "First PR",
-                        "number": 120,
-                        "url": "https://github.com/owner/repo/pull/120",
-                        "author_name": "Bob",
-                        "author_url": "https://github.com/bob",
-                        "reviews": 1,
-                        "approvals": 1,
-                        "changes": 0,
-                        "pr_body_urls_dict": {},
-                    },
-                    {
-                        "date": "2025-05-01",
-                        "title": "Second PR",
-                        "number": 125,
-                        "url": "https://github.com/owner/repo/pull/125",
-                        "author_name": "Charlie",
-                        "author_url": "https://github.com/charlie",
-                        "reviews": 1,
-                        "approvals": 1,
-                        "changes": 0,
-                        "pr_body_urls_dict": {},
-                    },
+                    PullRequestData(
+                        date="2025-05-01",
+                        title="Third PR",
+                        number=130,
+                        url="https://github.com/owner/repo/pull/130",
+                        author_name="Alice",
+                        author_url="https://github.com/alice",
+                        reviews=1,
+                        approvals=1,
+                        changes=0,
+                        pr_body_urls_dict={},
+                    ),
+                    PullRequestData(
+                        date="2025-05-01",
+                        title="First PR",
+                        number=120,
+                        url="https://github.com/owner/repo/pull/120",
+                        author_name="Bob",
+                        author_url="https://github.com/bob",
+                        reviews=1,
+                        approvals=1,
+                        changes=0,
+                        pr_body_urls_dict={},
+                    ),
+                    PullRequestData(
+                        date="2025-05-01",
+                        title="Second PR",
+                        number=125,
+                        url="https://github.com/owner/repo/pull/125",
+                        author_name="Charlie",
+                        author_url="https://github.com/charlie",
+                        reviews=1,
+                        approvals=1,
+                        changes=0,
+                        pr_body_urls_dict={},
+                    ),
                 ],
                 {},
             )
@@ -1000,17 +1001,17 @@ class TestHelperFunctions(unittest.TestCase):
         """Test create_markdown_table_row without URL column."""
         from gh_pulls_summary.main import create_markdown_table_row
 
-        pr = {
-            "date": "2025-05-01",
-            "title": "Add feature X",
-            "number": 123,
-            "url": "https://github.com/owner/repo/pull/123",
-            "author_name": "John Doe",
-            "author_url": "https://github.com/johndoe",
-            "changes": 1,
-            "approvals": 2,
-            "reviews": 3,
-        }
+        pr = PullRequestData(
+            date="2025-05-01",
+            title="Add feature X",
+            number=123,
+            url="https://github.com/owner/repo/pull/123",
+            author_name="John Doe",
+            author_url="https://github.com/johndoe",
+            changes=1,
+            approvals=2,
+            reviews=3,
+        )
 
         result = create_markdown_table_row(
             pr, url_column=False, rank_column=False, jira_issues=None
@@ -1023,21 +1024,21 @@ class TestHelperFunctions(unittest.TestCase):
         """Test create_markdown_table_row with URL column and URLs present."""
         from gh_pulls_summary.main import create_markdown_table_row
 
-        pr = {
-            "date": "2025-05-01",
-            "title": "Add feature X",
-            "number": 123,
-            "url": "https://github.com/owner/repo/pull/123",
-            "author_name": "John Doe",
-            "author_url": "https://github.com/johndoe",
-            "changes": 0,
-            "approvals": 1,
-            "reviews": 1,
-            "pr_body_urls_dict": {
+        pr = PullRequestData(
+            date="2025-05-01",
+            title="Add feature X",
+            number=123,
+            url="https://github.com/owner/repo/pull/123",
+            author_name="John Doe",
+            author_url="https://github.com/johndoe",
+            changes=0,
+            approvals=1,
+            reviews=1,
+            pr_body_urls_dict={
                 "bar123": "https://example.com/foo/bar123",
                 "baz456": "https://example.com/foo/baz456",
             },
-        }
+        )
 
         result = create_markdown_table_row(
             pr, url_column=True, rank_column=False, jira_issues=None
@@ -1050,18 +1051,18 @@ class TestHelperFunctions(unittest.TestCase):
         """Test create_markdown_table_row with URL column but no URLs."""
         from gh_pulls_summary.main import create_markdown_table_row
 
-        pr = {
-            "date": "2025-05-02",
-            "title": "Fix bug Y",
-            "number": 124,
-            "url": "https://github.com/owner/repo/pull/124",
-            "author_name": "Jane Smith",
-            "author_url": "https://github.com/janesmith",
-            "changes": 2,
-            "approvals": 0,
-            "reviews": 2,
-            "pr_body_urls_dict": {},
-        }
+        pr = PullRequestData(
+            date="2025-05-02",
+            title="Fix bug Y",
+            number=124,
+            url="https://github.com/owner/repo/pull/124",
+            author_name="Jane Smith",
+            author_url="https://github.com/janesmith",
+            changes=2,
+            approvals=0,
+            reviews=2,
+            pr_body_urls_dict={},
+        )
 
         result = create_markdown_table_row(
             pr, url_column=True, rank_column=False, jira_issues=None
@@ -1074,18 +1075,18 @@ class TestHelperFunctions(unittest.TestCase):
         """Test create_markdown_table_row with URL column when pr_body_urls_dict is missing."""
         from gh_pulls_summary.main import create_markdown_table_row
 
-        pr = {
-            "date": "2025-05-03",
-            "title": "Update docs",
-            "number": 125,
-            "url": "https://github.com/owner/repo/pull/125",
-            "author_name": "Bob Wilson",
-            "author_url": "https://github.com/bobwilson",
-            "changes": 0,
-            "approvals": 1,
-            "reviews": 1,
-            # No pr_body_urls_dict key
-        }
+        pr = PullRequestData(
+            date="2025-05-03",
+            title="Update docs",
+            number=125,
+            url="https://github.com/owner/repo/pull/125",
+            author_name="Bob Wilson",
+            author_url="https://github.com/bobwilson",
+            changes=0,
+            approvals=1,
+            reviews=1,
+            # No pr_body_urls_dict - uses default empty dict
+        )
 
         result = create_markdown_table_row(
             pr, url_column=True, rank_column=False, jira_issues=None
@@ -1279,23 +1280,23 @@ class TestMarkdownTableRowWithClosedIssues(unittest.TestCase):
 
     def test_create_markdown_table_row_with_closed_issues(self):
         """Test that closed JIRA issues are rendered with strikethrough."""
-        pr = {
-            "date": "2025-11-26",
-            "title": "Add proposal for nexus agent",
-            "number": 953,
-            "url": "https://github.com/ansible/handbook/pull/953",
-            "author_name": "Helen Bailey",
-            "author_url": "https://github.com/hakbailey",
-            "reviews": 2,
-            "approvals": 1,
-            "changes": 1,
-            "pr_body_urls_dict": {
+        pr = PullRequestData(
+            date="2025-11-26",
+            title="Add proposal for nexus agent",
+            number=953,
+            url="https://github.com/ansible/handbook/pull/953",
+            author_name="Helen Bailey",
+            author_url="https://github.com/hakbailey",
+            reviews=2,
+            approvals=1,
+            changes=1,
+            pr_body_urls_dict={
                 "PROJ-1660": "https://jira.example.com/browse/PROJ-1660",
                 "PROJ-1661": "https://jira.example.com/browse/PROJ-1661",
             },
-            "rank": "0_i02v00 PROJ-1660",
-            "closed_issue_keys": {"PROJ-1660"},  # Only PROJ-1660 is closed
-        }
+            rank="0_i02v00 PROJ-1660",
+            closed_issue_keys={"PROJ-1660"},  # Only PROJ-1660 is closed
+        )
 
         row = create_markdown_table_row(pr, url_column=True, rank_column=True)
 
@@ -1307,22 +1308,22 @@ class TestMarkdownTableRowWithClosedIssues(unittest.TestCase):
 
     def test_create_markdown_table_row_with_all_open_issues(self):
         """Test that open JIRA issues are rendered without strikethrough."""
-        pr = {
-            "date": "2025-11-26",
-            "title": "Add proposal for nexus agent",
-            "number": 953,
-            "url": "https://github.com/ansible/handbook/pull/953",
-            "author_name": "Helen Bailey",
-            "author_url": "https://github.com/hakbailey",
-            "reviews": 2,
-            "approvals": 1,
-            "changes": 1,
-            "pr_body_urls_dict": {
+        pr = PullRequestData(
+            date="2025-11-26",
+            title="Add proposal for nexus agent",
+            number=953,
+            url="https://github.com/ansible/handbook/pull/953",
+            author_name="Helen Bailey",
+            author_url="https://github.com/hakbailey",
+            reviews=2,
+            approvals=1,
+            changes=1,
+            pr_body_urls_dict={
                 "PROJ-1660": "https://jira.example.com/browse/PROJ-1660"
             },
-            "rank": "0_i02v00 PROJ-1660",
-            "closed_issue_keys": set(),  # No closed issues
-        }
+            rank="0_i02v00 PROJ-1660",
+            closed_issue_keys=set(),  # No closed issues
+        )
 
         row = create_markdown_table_row(pr, url_column=True, rank_column=True)
 

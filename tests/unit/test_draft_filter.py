@@ -59,7 +59,7 @@ class TestDraftFilter(unittest.TestCase):
 
         # Verify the result
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["title"], "Draft PR")
+        self.assertEqual(result[0].title, "Draft PR")
 
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_issue_events")
@@ -107,7 +107,7 @@ class TestDraftFilter(unittest.TestCase):
 
         # Verify the result
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["title"], "Regular PR")
+        self.assertEqual(result[0].title, "Regular PR")
 
 
 if __name__ == "__main__":

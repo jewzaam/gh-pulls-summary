@@ -13,7 +13,9 @@ import argcomplete
 
 from gh_pulls_summary.common import (  # noqa: F401
     GitHubAPIError,
+    JiraIssueData,
     NetworkError,
+    PullRequestData,
     RateLimitError,
     ValidationError,
     get_github_headers,
@@ -445,7 +447,9 @@ def fetch_and_process_pull_requests(
             pr_author_name = (
                 author_details.get("name") or pr_author
             )  # Fallback to username if name is None
-            pr_author_url = author_details.get("html_url")
+            pr_author_url = (
+                author_details.get("html_url") or f"https://github.com/{pr_author}"
+            )
         else:
             logging.warning(
                 f"Failed to fetch author details for {pr_author}. Using username as fallback. This may be due to network issues, API rate limits, or the user account being unavailable."
@@ -530,20 +534,20 @@ def fetch_and_process_pull_requests(
                 logging.debug(f"PR #{pr_number} rank: {pr_rank}")
 
         pull_requests.append(
-            {
-                "date": pr_ready_date,
-                "title": pr_title,
-                "number": pr_number,
-                "url": pr_url,
-                "author_name": pr_author_name,
-                "author_url": pr_author_url,
-                "reviews": pr_reviews,
-                "approvals": pr_approvals,
-                "changes": pr_changes,
-                "pr_body_urls_dict": pr_body_urls_dict,
-                "rank": pr_rank or "",
-                "closed_issue_keys": pr_closed_issue_keys,
-            }
+            PullRequestData(
+                date=pr_ready_date,
+                title=pr_title,
+                number=pr_number,
+                url=pr_url,
+                author_name=pr_author_name,
+                author_url=pr_author_url,
+                reviews=pr_reviews,
+                approvals=pr_approvals,
+                changes=pr_changes,
+                pr_body_urls_dict=pr_body_urls_dict,
+                rank=pr_rank or "",
+                closed_issue_keys=pr_closed_issue_keys,
+            )
         )
 
     # Build JIRA issues dictionary from metadata cache
@@ -558,12 +562,12 @@ def fetch_and_process_pull_requests(
             # Get JIRA summary
             jira_summary = issue_data.get("fields", {}).get("summary", issue_key)
 
-            jira_issues[issue_key] = {
-                "title": jira_summary,
-                "url": f"{jira_client.base_url}/browse/{issue_key}",
-                "rank": pr_rank or "",
-                "closed": issue_key in closed_keys,
-            }
+            jira_issues[issue_key] = JiraIssueData(
+                title=jira_summary,
+                url=f"{jira_client.base_url}/browse/{issue_key}",
+                rank=pr_rank or "",
+                closed=issue_key in closed_keys,
+            )
 
     logging.info("Done loading PR data.")
 
@@ -643,9 +647,9 @@ def generate_markdown_output(args):
         # Collect all issue keys already present in pull_requests
         existing_issue_keys = set()
         for pr in pull_requests:
-            if pr.get("rank"):
+            if pr.rank:
                 # Extract issue key from rank (format: "rank_value ISSUE-123")
-                rank_parts = pr["rank"].split()
+                rank_parts = pr.rank.split()
                 if rank_parts:
                     issue_key = rank_parts[-1]
                     existing_issue_keys.add(issue_key)
@@ -654,26 +658,24 @@ def generate_markdown_output(args):
         for issue_key in args.jira_include:
             if issue_key not in existing_issue_keys and issue_key in jira_issues:
                 jira_data = jira_issues[issue_key]
-                if jira_data.get("rank"):  # Only include if has valid rank
+                if jira_data.rank:  # Only include if has valid rank
                     logging.info(
                         f"Creating synthetic entry for jira-include issue {issue_key}"
                     )
                     pull_requests.append(
-                        {
-                            "date": "",
-                            "title": None,  # No PR title
-                            "number": None,  # No PR number - marker for synthetic entry
-                            "url": None,  # No PR URL
-                            "jira_key": issue_key,  # Reference to jira_issues dict
-                            "author_name": "",
-                            "author_url": "",
-                            "reviews": 0,
-                            "approvals": 0,
-                            "changes": "",
-                            "pr_body_urls_dict": {},
-                            "rank": jira_data["rank"],
-                            "closed_issue_keys": set(),
-                        }
+                        PullRequestData(
+                            date="",
+                            title=None,
+                            number=None,
+                            url=None,
+                            jira_key=issue_key,
+                            author_name="",
+                            author_url="",
+                            reviews=0,
+                            approvals=0,
+                            changes="",
+                            rank=jira_data.rank,
+                        )
                     )
                 else:
                     logging.warning(
@@ -706,22 +708,16 @@ def generate_markdown_output(args):
     def sort_key(pr):
         key = sort_column
         if key == "urls":
-            return (
-                ",".join(pr.get("pr_body_urls_dict", {}).keys())
-                if pr.get("pr_body_urls_dict")
-                else ""
-            )
+            return ",".join(pr.pr_body_urls_dict.keys()) if pr.pr_body_urls_dict else ""
         if key == "rank":
-            # Empty ranks should sort to the end
-            rank_value = pr.get("rank", "")
-            if not rank_value:
+            if not pr.rank:
                 return "z" * 100
-            return rank_value
-        return pr.get(key, "")
+            return pr.rank
+        return getattr(pr, key, "")
 
     # Two-phase sort: first by PR number (ascending) for stable baseline,
     # then by the requested column (stable sort preserves PR number order for ties)
-    pr_number_sorted = sorted(pull_requests, key=lambda pr: pr.get("number") or 0)
+    pr_number_sorted = sorted(pull_requests, key=lambda pr: pr.number or 0)
     sorted_prs = sorted(pr_number_sorted, key=sort_key)
 
     # Add data rows
