@@ -69,7 +69,11 @@ class TestJiraClient(unittest.TestCase):
         }
         mock_get.return_value = mock_response
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         # Mock the rank field discovery
         client._rank_field_id = "customfield_12311940"
 
@@ -84,7 +88,11 @@ class TestJiraClient(unittest.TestCase):
         mock_response.status_code = 404
         mock_get.return_value = mock_response
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12311940"
 
         with self.assertRaises(JiraClientError):
@@ -109,7 +117,11 @@ class TestJiraClient(unittest.TestCase):
 
     def test_extract_rank_value(self):
         """Test extracting rank value from issue data."""
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {
             "_rank_field_id": "customfield_12311940",
@@ -121,7 +133,11 @@ class TestJiraClient(unittest.TestCase):
 
     def test_extract_rank_value_missing(self):
         """Test extracting rank value when not present."""
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {"fields": {}}
 
@@ -130,7 +146,11 @@ class TestJiraClient(unittest.TestCase):
 
     def test_get_issue_type(self):
         """Test extracting issue type from issue data."""
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {"fields": {"issuetype": {"name": "Feature"}}}
 
@@ -139,7 +159,11 @@ class TestJiraClient(unittest.TestCase):
 
     def test_get_issue_type_missing(self):
         """Test extracting issue type when not present."""
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {"fields": {}}
 
@@ -148,7 +172,11 @@ class TestJiraClient(unittest.TestCase):
 
     def test_get_issue_status(self):
         """Test extracting issue status from issue data."""
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {"fields": {"status": {"name": "In Progress"}}}
 
@@ -157,7 +185,11 @@ class TestJiraClient(unittest.TestCase):
 
     def test_get_issue_status_missing(self):
         """Test extracting issue status when not present."""
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {"fields": {}}
 
@@ -179,7 +211,11 @@ class TestJiraClient(unittest.TestCase):
             {"key": "TEST-1", "fields": {"customfield_12345": "0_i00ywg:9"}},
         ]
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         # Trigger lazy discovery by calling get_issue
         issue = client.get_issue("TEST-1")
@@ -208,7 +244,11 @@ class TestJiraClient(unittest.TestCase):
             {"key": "TEST-1", "fields": {"customfield_12345": "0_i00ywg:9"}},
         ]
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         # Trigger lazy discovery
         client.get_issue("TEST-1")
@@ -231,7 +271,11 @@ class TestJiraClient(unittest.TestCase):
             {"key": "TEST-1", "fields": {}},
         ]
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         # Trigger lazy discovery
         client.get_issue("TEST-1")
@@ -248,7 +292,11 @@ class TestJiraClient(unittest.TestCase):
             {"key": "TEST-1", "fields": {}},
         ]
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         # Trigger lazy discovery
         client.get_issue("TEST-1")
@@ -1435,7 +1483,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         }
         mock_get.return_value = mock_response
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         parent_fields = client._discover_parent_fields("TEST-123", "TEST", "Story")
@@ -1462,7 +1514,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         }
         mock_get.return_value = mock_response
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         # First call should hit API
@@ -1480,7 +1536,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test finding parent key from standard subtask parent field."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {
             "key": "TEST-123",
@@ -1512,7 +1572,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         }
         mock_get.return_value = mock_response
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         issue_data = {
@@ -1531,7 +1595,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test finding parent when no parent exists."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
 
         issue_data = {
             "key": "TEST-123",
@@ -1548,7 +1616,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test get_ancestors using metadata cache (no API calls)."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         # Build metadata cache: TASK-100 -> STORY-50 -> FEATURE-10
@@ -1583,7 +1655,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test that get_ancestors caches results."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         metadata_cache = {
@@ -1613,7 +1689,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test that get_ancestors caches empty results."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         metadata_cache = {
@@ -1636,7 +1716,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test that get_ancestors detects and handles cycles without infinite loop."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         # Create a cycle: A -> B -> C -> B (C points back to B)
@@ -1677,7 +1761,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test that get_ancestors respects max_depth."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         # Build long chain: TASK-5 -> TASK-4 -> TASK-3 -> TASK-2 -> TASK-1
@@ -1705,7 +1793,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test get_ancestors when parent is missing from cache (old behavior for reference)."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         metadata_cache = {
@@ -1728,7 +1820,11 @@ class TestJiraClientAncestorMethods(unittest.TestCase):
         """Test that get_ancestors falls back to API when parent is missing from cache."""
         from gh_pulls_summary.jira_client import JiraClient
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12345"
 
         # Cache has the child, but not the parent or grandparent
@@ -1838,7 +1934,11 @@ class TestJiraRateLimitRetry(unittest.TestCase):
 
         mock_get.side_effect = [mock_response_429, mock_response_200]
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12311940"
 
         issue_data = client.get_issue("TEST-123")
@@ -1859,7 +1959,11 @@ class TestJiraRateLimitRetry(unittest.TestCase):
         mock_response.text = '{"message":"Rate limit exceeded."}'
         mock_get.return_value = mock_response
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12311940"
 
         with self.assertRaises(JiraClientError) as context:
@@ -1896,7 +2000,11 @@ class TestJiraRateLimitRetry(unittest.TestCase):
             mock_response_200,
         ]
 
-        client = JiraClient(base_url="https://issues.example.com", user="test@example.com", token="testtoken")
+        client = JiraClient(
+            base_url="https://issues.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
         client._rank_field_id = "customfield_12311940"
 
         issue_data = client.get_issue("TEST-123")
