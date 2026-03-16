@@ -1,6 +1,6 @@
 # gh-pulls-summary - Project Context
 
-**Last Updated**: 2024-11-05
+**Last Updated**: 2026-03-16
 
 ## Overview
 
@@ -42,6 +42,11 @@ Generate weekly/monthly PR summary reports for team meetings, documentation, or 
   - Environment variable: `GITHUB_TOKEN`
   - CLI argument takes precedence over environment variable
 - Compatible with both public and private repositories
+
+**Review Requested Filtering** (`--review-requested-for`):
+- Filter PRs where review is requested for a specific GitHub username
+- Fetches all PRs then filters using Search API intersection (2 API calls)
+- Returns full PR objects with consistent data structure
 
 **API Usage**:
 - Uses GitHub REST API v3
@@ -94,7 +99,7 @@ Multiple filtering options available:
 ```markdown
 | Date 🔽 | Title | Author | ∆ | +1s | URLs | RANK |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2025-09-29 | Feature X #[123](url) | [John](url) | 1 | 4 of 7 | [ANSTRAT-1660](url) | 0_i00ywg:9 |
+| 2025-09-29 | Feature X #[123](url) | [John](url) | 1 | 4 of 7 | [PROJECT-100](url) | 0_i00ywg:9 |
 ```
 
 ---
@@ -108,42 +113,50 @@ Optionally fetch JIRA issue metadata (specifically rank information) to support 
 ### How It Works
 
 When `--include-rank` flag is enabled:
-1. **Extracts JIRA issue keys**:
-   - First checks PR metadata table (first 50 lines) for `Feature / Initiative` row (case-insensitive)
-   - Extracts **all** matching issues from the metadata row (not just first match)
+1. **Extracts JIRA issue keys** (priority order):
+   - First checks PR body metadata table for row matching `--jira-metadata-row-pattern`
+   - Then checks file content metadata tables (search depth controlled by `--jira-metadata-row-search-depth`)
    - Falls back to searching full content of files matching `--file-include` patterns
    - Uses `--jira-issue-pattern` regex to extract issue keys (supports multiple patterns)
-2. **Fetches metadata** for each JIRA issue via REST API
-3. **Filters issues** by:
+   - `--jira-include` issues are always added regardless of extraction
+2. **Fetches metadata** via batch JIRA search API (v3 search/jql endpoint)
+3. **Hierarchy traversal**: Non-Feature/Initiative issues are traversed upward to find ancestor Feature/Initiative
+4. **Filters issues** by:
    - Issue type: Only Feature and Initiative
-   - Status: Only New, Backlog, In Progress, or Refinement
-4. **Selects highest priority** rank (lowest lexicographic value) if multiple issues match
-5. **Formats rank value** for markdown display (replaces pipes with underscores, appends issue key)
-6. **Adds RANK column** to output table (format: `<rank> <issue_key>`)
-7. **Supports sorting** by rank
+   - Status: Prefers open (New, Backlog, In Progress, Refinement)
+5. **Closed issue fallback**: Falls back to closed issues if no open Feature/Initiative found (displayed with strikethrough)
+6. **Selects highest priority** rank (lowest lexicographic value) if multiple issues match
+7. **Formats rank value** for markdown display (replaces pipes with underscores, appends issue key)
+8. **Adds RANK column** to output table (format: `<rank> <issue_key>`)
+9. **Supports sorting** by rank
 
 ### JIRA Client
 
 **Location**: `src/gh_pulls_summary/jira_client.py`
 
 **Features**:
-- Standalone REST API client (no external dependencies)
+- Standalone REST API client (no external dependencies beyond `requests`)
 - Automatic rank field discovery (looks for `customfield_12311940` or similar)
-- Token-based authentication (Bearer token)
+- Basic Auth for Atlassian Cloud (email:api_token)
+- Batch issue fetching via v3 search/jql endpoint
+- Hierarchy traversal with dynamic parent field discovery
+- Issue data caching to avoid redundant API calls
 - Field ID caching to minimize API calls
 - Comprehensive error handling with custom exceptions
 
 **Authentication**:
-- Token-based authentication only (Bearer token)
+- Atlassian Cloud Basic Auth (email + API token)
 - JIRA URL:
   - Command-line argument: `--jira-url`
   - Environment variable: `JIRA_BASE_URL`
-  - CLI argument takes precedence over environment variable
+- JIRA User (email):
+  - Command-line argument: `--jira-user`
+  - Environment variable: `JIRA_USER`
 - JIRA Token:
   - Command-line argument: `--jira-token`
   - Environment variable: `JIRA_TOKEN`
-  - CLI argument takes precedence over environment variable
-- Both URL and token are required when `--include-rank` is specified
+- CLI arguments take precedence over environment variables
+- All three (URL, user, token) are required when `--include-rank` is specified
 - Tool will fail execution if rank is requested but JIRA is not properly configured
 
 ### Rank Field Handling
@@ -164,22 +177,24 @@ When `--include-rank` flag is enabled:
 - Excludes: Release Pending, Released, Closed, and all other statuses
 - Rationale: Only active issues should be considered for ranking
 
-**JIRA Issue Extraction**:
-- **Priority 1**: Checks PR metadata table (first 50 lines) for `Feature / Initiative` row (case-insensitive)
-  - Extracts **all** matching issues from metadata row (not just first)
-- **Priority 2**: If not found in metadata, searches full content of files matching `--file-include`
+**JIRA Issue Extraction** (priority order):
+- **Priority 1**: Checks PR body metadata table for row matching `--jira-metadata-row-pattern` (configurable, default: `feature\s*/?\\s*initiative`)
+- **Priority 2**: Checks file content metadata tables (search depth controlled by `--jira-metadata-row-search-depth`, default: 50 lines)
+- **Priority 3**: Searches full content of files matching `--file-include` patterns
 - Uses `--jira-issue-pattern` regex to extract issue keys (supports multiple patterns via `action="append"`)
+- `--jira-include` issues are always added regardless of extraction results
 
 **Multiple Issues Per PR**:
 - If PR references multiple JIRA issues (from file contents or metadata)
-- Tool fetches metadata for all issues
-- Filters by type (Feature/Initiative) and status (New/Backlog/In Progress/Refinement)
+- Tool fetches metadata for all issues via batch API
+- Non-Feature/Initiative issues trigger hierarchy traversal to find ancestor Feature/Initiative
+- Prefers open issues; falls back to closed issues (displayed with strikethrough)
 - Selects issue with highest priority (lowest lexicographic rank)
 - Displays that rank with issue key appended in RANK column
 
 **Rank Display Format**:
-- Original rank: `0|i00ywg:9` for issue `ANSTRAT-1579`
-- Displayed rank: `0_i00ywg:9 ANSTRAT-1579`
+- Original rank: `0|i00ywg:9` for issue `PROJECT-123`
+- Displayed rank: `0_i00ywg:9 PROJECT-123`
 - Pipe characters (`|`) replaced with underscores to prevent breaking table formatting
 - Issue key appended for transparency
 
@@ -187,15 +202,21 @@ When `--include-rank` flag is enabled:
 
 **Command-Line Arguments**:
 ```bash
---jira-url <url>                  # JIRA instance base URL
---jira-token <token>              # JIRA API token (Bearer token)
---include-rank                    # Enable JIRA rank column
---jira-issue-pattern <regex>      # Regex to extract issue keys (default: ANSTRAT-\d+)
+--jira-url <url>                           # JIRA instance base URL
+--jira-user <email>                        # JIRA user email (for Basic Auth)
+--jira-token <token>                       # JIRA API token
+--jira-rank-field <field_id>               # Explicit rank field ID (auto-discovered if omitted)
+--include-rank                             # Enable JIRA rank column
+--jira-issue-pattern <regex>               # Regex to extract issue keys (repeatable)
+--jira-include <issue_key>                 # Always include this issue (repeatable)
+--jira-metadata-row-pattern <regex>        # Pattern for metadata table row (default: feature\s*/?\\s*initiative)
+--jira-metadata-row-search-depth <int>     # Lines to search for metadata (default: 50, -1 for all)
 ```
 
 **Environment Variables**:
 ```bash
-JIRA_BASE_URL=https://issues.redhat.com
+JIRA_BASE_URL=https://yourorg.atlassian.net
+JIRA_USER=you@example.com
 JIRA_TOKEN=mytoken
 ```
 
@@ -204,6 +225,7 @@ JIRA_TOKEN=mytoken
 **Hard Failure on Configuration Issues**:
 - If `--include-rank` is specified but JIRA is not properly configured, execution fails immediately
 - Missing JIRA URL: Tool exits with error message
+- Missing JIRA user: Tool exits with error message
 - Missing JIRA token: Tool exits with error message
 - JIRA connection test failure: Tool exits with error message
 
@@ -230,17 +252,32 @@ gh-pulls-summary/
 │   ├── main.py               # Core application logic
 │   └── jira_client.py        # JIRA REST API client
 ├── tests/
-│   ├── unit/                 # Unit tests (98 tests, 96%+ coverage)
+│   ├── unit/
 │   │   ├── test_main.py
 │   │   ├── test_jira_client.py
 │   │   ├── test_api_requests.py
 │   │   ├── test_argument_parsing.py
 │   │   ├── test_processing_logic.py
-│   │   └── ...
+│   │   ├── test_review_requested_filter.py
+│   │   ├── test_draft_filter.py
+│   │   ├── test_file_filter.py
+│   │   ├── test_rate_limit_retry.py
+│   │   └── test_error_conditions.py
 │   └── integration/          # Integration tests (real API calls)
 │       ├── test_integration.py
 │       └── test_integration_simple.py
 ├── make/                     # Modular Makefile components
+│   ├── common.mk
+│   ├── env.mk
+│   ├── lint.mk
+│   ├── test.mk
+│   └── typecheck.mk
+├── .github/workflows/
+│   ├── test.yml
+│   ├── lint.yml
+│   ├── coverage.yml
+│   ├── format.yml
+│   └── typecheck.yml
 ├── docs/                     # Documentation
 ├── Makefile                  # Build automation
 ├── pyproject.toml           # Python project config
@@ -269,33 +306,42 @@ gh-pulls-summary/
 #### 2. JIRA API Client (`jira_client.py`)
 
 **Classes**:
-- `JiraClient`: Main REST API client
+- `JiraClient`: Main REST API client (Basic Auth, v3 search/jql)
 - `JiraClientError`: Base exception for JIRA errors
 - `JiraAuthenticationError`: Authentication-specific errors
 
 **Methods**:
-- `get_issue(issue_key)`: Fetch single issue with rank field
-- `get_issues_metadata(issue_keys)`: Batch fetch metadata
+- `get_issue(issue_key)`: Fetch single issue with rank field (cached)
+- `get_issues_metadata(issue_keys)`: Batch fetch via v3 search/jql endpoint
 - `extract_rank_value(issue_data)`: Extract rank from issue data
 - `get_issue_type(issue_data)`: Extract issue type
+- `get_issue_status(issue_data)`: Extract issue status
+- `get_ancestors(issue_key)`: Traverse hierarchy upward to find parent Feature/Initiative
 - `_discover_rank_field()`: Auto-discover rank field ID
+- `_discover_parent_fields(issue_key, project, issue_type)`: Discover parent link fields via editmeta API
+- `_find_parent_key(issue_data)`: Find parent key using multiple strategies
 
 #### 3. Data Processing Pipeline (`main.py`)
 
 **Flow**:
 1. Parse command-line arguments
 2. Initialize JIRA client (if `--include-rank` specified)
-3. Fetch PRs from GitHub
+3. Fetch PRs from GitHub (with optional `--review-requested-for` filtering)
 4. For each PR:
    - Apply draft filter
    - Apply file filters
    - Fetch review information
    - Fetch author details
    - Extract URLs from diff (if requested)
-   - Fetch JIRA rank (if enabled)
-5. Sort PRs by specified column
-6. Generate markdown table
-7. Output to file or stdout
+   - Extract JIRA issue keys (metadata table > file content)
+5. Batch fetch JIRA metadata for all discovered issues
+6. For each PR with JIRA issues:
+   - Traverse hierarchy if needed (non-Feature/Initiative)
+   - Get rank (prefer open issues, fall back to closed)
+7. Merge `--jira-include` issues into output
+8. Sort PRs by specified column (with PR number tiebreaker)
+9. Generate markdown table
+10. Output to file or stdout
 
 **Data Structures**:
 
@@ -339,15 +385,21 @@ PR Data Dictionary:
 **GitHub Options**:
 - `--pr-number <num>`: Query single PR
 - `--draft-filter <only-drafts|no-drafts>`: Filter by draft status
+- `--review-requested-for <username>`: Filter PRs where review is requested for user
 - `--file-include <regex>`: Include PRs with matching file paths (repeatable)
 - `--file-exclude <regex>`: Exclude PRs with matching file paths (repeatable)
 - `--url-from-pr-content <regex>`: Extract URLs from PR diffs
 
 **JIRA Options**:
 - `--jira-url <url>`: JIRA instance base URL
-- `--jira-token <token>`: JIRA API token (Bearer token)
+- `--jira-user <email>`: JIRA user email (Basic Auth)
+- `--jira-token <token>`: JIRA API token
+- `--jira-rank-field <field_id>`: Explicit rank field ID
 - `--include-rank`: Enable JIRA rank column
-- `--jira-issue-pattern <regex>`: Pattern to extract issue keys
+- `--jira-issue-pattern <regex>`: Pattern to extract issue keys (repeatable)
+- `--jira-include <issue_key>`: Always include this issue (repeatable)
+- `--jira-metadata-row-pattern <regex>`: Metadata table row pattern
+- `--jira-metadata-row-search-depth <int>`: Lines to search for metadata
 
 **Output Options**:
 - `--output-markdown <file>`: Write output to file
@@ -363,7 +415,8 @@ PR Data Dictionary:
 
 **JIRA**:
 - `--jira-url` or `JIRA_BASE_URL`: JIRA instance base URL
-- `--jira-token` or `JIRA_TOKEN`: JIRA API token (Bearer token) for authentication
+- `--jira-user` or `JIRA_USER`: JIRA user email (for Atlassian Cloud Basic Auth)
+- `--jira-token` or `JIRA_TOKEN`: JIRA API token
   - CLI arguments take precedence over environment variables
 
 ### Default Behaviors
@@ -380,18 +433,17 @@ PR Data Dictionary:
 
 ### Unit Tests
 
-**Coverage**: 96%+ of code
-
 **Test Files**:
-- `test_main.py`: Core application logic (39 tests)
-- `test_jira_client.py`: JIRA integration (18 tests)
-- `test_api_requests.py`: GitHub API calls (6 tests)
-- `test_argument_parsing.py`: CLI argument parsing (5 tests)
-- `test_processing_logic.py`: Data processing (10 tests)
-- `test_draft_filter.py`: Draft filtering (2 tests)
-- `test_file_filter.py`: File pattern filtering (3 tests)
-- `test_rate_limit_retry.py`: Rate limit handling (9 tests)
-- `test_error_conditions.py`: Error scenarios (14 tests)
+- `test_main.py`: Core application logic
+- `test_jira_client.py`: JIRA integration
+- `test_api_requests.py`: GitHub API calls
+- `test_argument_parsing.py`: CLI argument parsing
+- `test_processing_logic.py`: Data processing
+- `test_review_requested_filter.py`: Review requested filtering
+- `test_draft_filter.py`: Draft filtering
+- `test_file_filter.py`: File pattern filtering
+- `test_rate_limit_retry.py`: Rate limit handling
+- `test_error_conditions.py`: Error scenarios
 
 **Testing Approach**:
 - Mock all external API calls (GitHub, JIRA)
@@ -532,11 +584,18 @@ make format    # Auto-format code
    - Triggers: PRs and pushes to main
 
 2. **Lint Workflow** (`.github/workflows/lint.yml`)
-   - Runs: ruff and mypy
-   - Ensures code quality
+   - Runs: ruff linting
    - Triggers: PRs and pushes to main
 
-3. **Coverage Workflow** (`.github/workflows/coverage.yml`)
+3. **Typecheck Workflow** (`.github/workflows/typecheck.yml`)
+   - Runs: mypy static type checking
+   - Triggers: PRs and pushes to main
+
+4. **Format Workflow** (`.github/workflows/format.yml`)
+   - Runs: ruff format check
+   - Triggers: PRs and pushes to main
+
+5. **Coverage Workflow** (`.github/workflows/coverage.yml`)
    - Threshold: 90% coverage required
    - Fails if coverage drops below threshold
    - Triggers: PRs and pushes to main
@@ -565,13 +624,14 @@ gh-pulls-summary \
 
 ```bash
 # Show PRs sorted by JIRA rank
-export JIRA_BASE_URL=https://issues.redhat.com
+export JIRA_BASE_URL=https://yourorg.atlassian.net
+export JIRA_USER=you@example.com
 export JIRA_TOKEN=mytoken
 
 gh-pulls-summary \
   --owner ansible \
   --repo ansible-rulebook \
-  --url-from-pr-content 'https://issues.redhat.com/browse/(ANSTRAT-\d+)' \
+  --url-from-pr-content 'https://yourorg.atlassian.net/browse/(PROJECT-\d+)' \
   --include-rank \
   --sort-column rank
 ```
@@ -634,7 +694,7 @@ gh-pulls-summary \
 
 **Solutions**:
 1. Verify JIRA_BASE_URL is correct
-2. Check JIRA_USERNAME and JIRA_TOKEN are set
+2. Check JIRA_USER and JIRA_TOKEN are set
 3. Test JIRA credentials manually
 4. Tool continues without rank data if JIRA fails
 
@@ -708,18 +768,30 @@ The JIRA client (`jira_client.py`) is **maintained independently** from the mcp-
 
 **Features**:
 - GitHub PR fetching and summarization
-- Multiple filtering options (draft, files)
+- Multiple filtering options (draft, files, review-requested-for)
 - URL extraction from diffs
-- JIRA rank integration
+- JIRA rank integration with hierarchy traversal
+- Batch JIRA metadata fetching (v3 search/jql)
+- Closed issue fallback with strikethrough
+- Always-include JIRA issues (`--jira-include`)
+- Configurable metadata extraction (`--jira-metadata-row-pattern`, `--jira-metadata-row-search-depth`)
+- Atlassian Cloud Basic Auth
+- Issue data caching for hierarchy traversal
+- Sort stability with PR number tiebreaker
 - Markdown table output
-- 96%+ test coverage
+- Separate typecheck workflow
 
-**Recent Additions** (2024-11-05):
-- JIRA rank field integration
-- Issue type filtering (Feature/Initiative)
-- Rank-based sorting
-- Independent JIRA client implementation
-- 18 new JIRA-specific tests
+**Recent Changes**:
+- Switched JIRA auth from Bearer token to Basic Auth (email:api_token)
+- Added v3 search/jql endpoint for Atlassian Cloud
+- Added hierarchy traversal for non-Feature/Initiative issues
+- Added closed issue fallback with strikethrough display
+- Added `--jira-include` flag for marker stories
+- Added `--review-requested-for` filter
+- Added `--jira-metadata-row-pattern` and `--jira-metadata-row-search-depth`
+- Added separate typecheck target and workflow
+- Added PR number as tiebreaker for sort stability
+- Added JIRA issue data caching
 
 ---
 
@@ -768,5 +840,5 @@ The JIRA client (`jira_client.py`) is **maintained independently** from the mcp-
 
 **Document Maintained By**: Development team
 **Review Frequency**: Update on significant feature additions or architectural changes
-**Last Major Update**: 2024-11-05 (JIRA integration)
+**Last Major Update**: 2026-03-16 (JIRA hierarchy, Basic Auth, batch fetching, new CLI options)
 
