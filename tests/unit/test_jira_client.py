@@ -294,11 +294,12 @@ class TestJiraClient(unittest.TestCase):
 
         result = client.get_issues_metadata(["ANSTRAT-1", "ANSTRAT-2", "ANSTRAT-3"])
 
-        # Should use batch search API
+        # Should use v3 batch search/jql API
         mock_make_request.assert_called_once()
         call_args = mock_make_request.call_args
-        self.assertIn("search", call_args[0][0])
+        self.assertEqual("search/jql", call_args[0][0])
         self.assertIn("jql", call_args[1]["params"])
+        self.assertIn("/rest/api/3/", call_args[1]["api_base"])
 
         # Should return two successful fetches (ANSTRAT-2 not found)
         self.assertEqual(len(result), 2)
