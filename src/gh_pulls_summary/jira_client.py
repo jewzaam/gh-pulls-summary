@@ -104,6 +104,7 @@ class JiraClient:
         params: dict[str, Any] | None = None,
         resource_name: str = "resource",
         max_retries: int = 3,
+        api_base: str | None = None,
     ) -> Any:
         """
         Make an API request with centralized error handling and retry logic for rate limits.
@@ -113,6 +114,7 @@ class JiraClient:
             params: Query parameters
             resource_name: Name of resource for error messages
             max_retries: Maximum number of retries for rate limit errors (429)
+            api_base: Override the default API base URL (e.g., for v3 endpoints)
 
         Returns:
             JSON response data
@@ -123,7 +125,8 @@ class JiraClient:
         """
         import time
 
-        url = urljoin(self.api_base, endpoint)
+        base = api_base or self.api_base
+        url = urljoin(base, endpoint)
         logging.debug(f"JIRA API request: {url}")
         if params:
             logging.debug(f"Query parameters: {params}")
@@ -381,10 +384,15 @@ class JiraClient:
             }
 
         try:
+            # Use v3 search/jql endpoint (v2 search was removed on Atlassian Cloud)
+            v3_api_base = urljoin(self.base_url, "/rest/api/3/")
             response = cast(
                 dict[str, Any],
                 self._make_request(
-                    "search", params=params, resource_name="issue search"
+                    "search/jql",
+                    params=params,
+                    resource_name="issue search",
+                    api_base=v3_api_base,
                 ),
             )
 
