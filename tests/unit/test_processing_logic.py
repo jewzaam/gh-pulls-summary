@@ -2,6 +2,7 @@ import logging
 import unittest
 from unittest.mock import MagicMock, patch
 
+from gh_pulls_summary.common import PullRequestData
 from gh_pulls_summary.main import (
     fetch_and_process_pull_requests,
     generate_markdown_output,
@@ -73,20 +74,20 @@ class TestProcessingLogic(unittest.TestCase):
 
         # Verify the result
         expected_result = [
-            {
-                "date": "2025-05-02",
-                "title": "Add feature X",
-                "number": 1,
-                "url": "https://github.com/owner/repo/pull/1",
-                "author_name": "John Doe",
-                "author_url": "https://github.com/johndoe",
-                "pr_body_urls_dict": {},
-                "reviews": 2,
-                "approvals": 1,
-                "changes": 0,
-                "rank": "",
-                "closed_issue_keys": set(),
-            }
+            PullRequestData(
+                date="2025-05-02",
+                title="Add feature X",
+                number=1,
+                url="https://github.com/owner/repo/pull/1",
+                author_name="John Doe",
+                author_url="https://github.com/johndoe",
+                pr_body_urls_dict={},
+                reviews=2,
+                approvals=1,
+                changes=0,
+                rank="",
+                closed_issue_keys=set(),
+            )
         ]
         self.assertEqual(result, expected_result)
 
@@ -123,20 +124,20 @@ class TestProcessingLogic(unittest.TestCase):
         mock_fetch_reviews.return_value = []
         result, _ = fetch_and_process_pull_requests("owner", "repo")
         expected_result = [
-            {
-                "date": "2025-05-06",
-                "title": "Fix bug Y",
-                "number": 2,
-                "url": "https://github.com/owner/repo/pull/2",
-                "author_name": "janedoe",  # Fallback to username
-                "author_url": "https://github.com/janedoe",
-                "pr_body_urls_dict": {},
-                "reviews": 0,
-                "approvals": 0,
-                "changes": 0,
-                "rank": "",
-                "closed_issue_keys": set(),
-            }
+            PullRequestData(
+                date="2025-05-06",
+                title="Fix bug Y",
+                number=2,
+                url="https://github.com/owner/repo/pull/2",
+                author_name="janedoe",  # Fallback to username
+                author_url="https://github.com/janedoe",
+                pr_body_urls_dict={},
+                reviews=0,
+                approvals=0,
+                changes=0,
+                rank="",
+                closed_issue_keys=set(),
+            )
         ]
         self.assertEqual(result, expected_result)
 
@@ -191,7 +192,7 @@ class TestProcessingLogic(unittest.TestCase):
         self.assertEqual(len(prs), 1)
         pr = prs[0]
         self.assertEqual(
-            pr["pr_body_urls_dict"],
+            pr.pr_body_urls_dict,
             {
                 "bar123": "https://example.com/foo/bar123",
                 "baz456": "https://example.com/foo/baz456",
@@ -232,17 +233,17 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
         # Mock pull request data
         mock_fetch_and_process_pull_requests.return_value = (
             [
-                {
-                    "date": "2025-05-01",
-                    "title": "Add feature X",
-                    "number": 123,
-                    "url": "https://github.com/owner/repo/pull/123",
-                    "author_name": "John Doe",
-                    "author_url": "https://github.com/johndoe",
-                    "reviews": 2,
-                    "approvals": 2,
-                    "changes": 1,
-                }
+                PullRequestData(
+                    date="2025-05-01",
+                    title="Add feature X",
+                    number=123,
+                    url="https://github.com/owner/repo/pull/123",
+                    author_name="John Doe",
+                    author_url="https://github.com/johndoe",
+                    reviews=2,
+                    approvals=2,
+                    changes=1,
+                )
             ],
             {},  # Empty jira_issues dict
         )
@@ -303,18 +304,18 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
 
         mock_fetch.return_value = (
             [
-                {
-                    "date": "2025-05-01",
-                    "title": "Add feature X",
-                    "number": 123,
-                    "url": "https://github.com/owner/repo/pull/123",
-                    "author_name": "John Doe",
-                    "author_url": "https://github.com/johndoe",
-                    "reviews": 2,
-                    "approvals": 2,
-                    "changes": 1,
-                    "pr_body_urls_dict": {},
-                }
+                PullRequestData(
+                    date="2025-05-01",
+                    title="Add feature X",
+                    number=123,
+                    url="https://github.com/owner/repo/pull/123",
+                    author_name="John Doe",
+                    author_url="https://github.com/johndoe",
+                    reviews=2,
+                    approvals=2,
+                    changes=1,
+                    pr_body_urls_dict={},
+                )
             ],
             {},  # Empty jira_issues dict
         )
@@ -356,30 +357,30 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
 
         mock_fetch.return_value = (
             [
-                {
-                    "date": "2025-05-01",
-                    "title": "Z feature",
-                    "number": 123,
-                    "url": "https://github.com/owner/repo/pull/123",
-                    "author_name": "John Doe",
-                    "author_url": "https://github.com/johndoe",
-                    "reviews": 2,
-                    "approvals": 2,
-                    "changes": 1,
-                    "pr_body_urls_dict": {},
-                },
-                {
-                    "date": "2025-05-02",
-                    "title": "A bug fix",
-                    "number": 124,
-                    "url": "https://github.com/owner/repo/pull/124",
-                    "author_name": "Jane Smith",
-                    "author_url": "https://github.com/janesmith",
-                    "reviews": 1,
-                    "approvals": 1,
-                    "changes": 0,
-                    "pr_body_urls_dict": {},
-                },
+                PullRequestData(
+                    date="2025-05-01",
+                    title="Z feature",
+                    number=123,
+                    url="https://github.com/owner/repo/pull/123",
+                    author_name="John Doe",
+                    author_url="https://github.com/johndoe",
+                    reviews=2,
+                    approvals=2,
+                    changes=1,
+                    pr_body_urls_dict={},
+                ),
+                PullRequestData(
+                    date="2025-05-02",
+                    title="A bug fix",
+                    number=124,
+                    url="https://github.com/owner/repo/pull/124",
+                    author_name="Jane Smith",
+                    author_url="https://github.com/janesmith",
+                    reviews=1,
+                    approvals=1,
+                    changes=0,
+                    pr_body_urls_dict={},
+                ),
             ],
             {},  # Empty jira_issues dict
         )

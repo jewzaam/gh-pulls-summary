@@ -84,18 +84,17 @@ def create_markdown_table_row(pr, url_column, rank_column, jira_issues=None):
     Creates a single markdown table row for a pull request.
 
     Args:
-        pr: Pull request data dictionary
+        pr: PullRequestData instance
         url_column: Whether to include URLs column
         rank_column: Whether to include rank column
-        jira_issues: Dictionary mapping JIRA keys to their data (for synthetic entries)
+        jira_issues: Dictionary mapping JIRA keys to JiraIssueData (for synthetic entries)
     """
     # Handle synthetic JIRA entries (no PR number)
-    if pr["number"] is None and "jira_key" in pr:
-        # Synthetic JIRA entry: lookup JIRA data
-        jira_key = pr["jira_key"]
+    if pr.number is None and pr.jira_key is not None:
+        jira_key = pr.jira_key
         if jira_issues and jira_key in jira_issues:
             jira_data = jira_issues[jira_key]
-            title_link = f"[{jira_data['title']}]({jira_data['url']})"
+            title_link = f"[{jira_data.title}]({jira_data.url})"
         else:
             title_link = f"[{jira_key}]()"
         author_link = ""
@@ -103,32 +102,22 @@ def create_markdown_table_row(pr, url_column, rank_column, jira_issues=None):
         changes_text = ""
     else:
         # Regular PR entry
-        title_link = f"{pr['title']} #[{pr['number']}]({pr['url']})"
+        title_link = f"{pr.title} #[{pr.number}]({pr.url})"
 
-        # Handle author
-        if pr["author_name"]:
-            author_link = f"[{pr['author_name']}]({pr['author_url']})"
-        else:
-            author_link = ""
-
-        # Handle reviews/approvals
-        if pr["reviews"] > 0:
-            approvals_text = f"{pr['approvals']} of {pr['reviews']}"
-        else:
-            approvals_text = ""
+        author_link = f"[{pr.author_name}]({pr.author_url})" if pr.author_name else ""
+        approvals_text = f"{pr.approvals} of {pr.reviews}" if pr.reviews > 0 else ""
 
         # Handle changes (always show for regular PRs, even if 0)
-        changes_text = str(pr["changes"])
+        changes_text = str(pr.changes)
 
-    row = f"| {pr['date']} | {title_link} | {author_link} | {changes_text} | {approvals_text} |"
+    row = f"| {pr.date} | {title_link} | {author_link} | {changes_text} | {approvals_text} |"
 
     if url_column:
-        if pr.get("pr_body_urls_dict") and pr["pr_body_urls_dict"]:
-            closed_keys = pr.get("closed_issue_keys", set())
+        if pr.pr_body_urls_dict:
             url_links = []
-            for text, url in pr["pr_body_urls_dict"].items():
+            for text, url in pr.pr_body_urls_dict.items():
                 # Apply strikethrough to closed JIRA issues
-                if text in closed_keys:
+                if text in pr.closed_issue_keys:
                     url_links.append(f"[~~{text}~~]({url})")
                 else:
                     url_links.append(f"[{text}]({url})")
@@ -137,8 +126,7 @@ def create_markdown_table_row(pr, url_column, rank_column, jira_issues=None):
             row = row + " |"
 
     if rank_column:
-        rank_value = pr.get("rank", "")
-        row = row + f" {rank_value} |"
+        row = row + f" {pr.rank} |"
 
     return row
 

@@ -1,6 +1,8 @@
 """
-Shared constants, exceptions, and utilities used across modules.
+Shared constants, exceptions, data models, and utilities used across modules.
 """
+
+from dataclasses import dataclass, field
 
 # Configuration
 GITHUB_API_BASE = "https://api.github.com"
@@ -49,3 +51,35 @@ class NetworkError(Exception):
 
 class ValidationError(Exception):
     """Raised when input validation fails."""
+
+
+# Data Models
+
+
+@dataclass
+class PullRequestData:
+    """Data for a single pull request or synthetic JIRA entry in the output table."""
+
+    date: str
+    title: str | None
+    number: int | None
+    url: str | None
+    author_name: str
+    author_url: str
+    reviews: int
+    approvals: int
+    changes: int | str
+    pr_body_urls_dict: dict[str, str] = field(default_factory=dict)
+    rank: str = ""
+    closed_issue_keys: set[str] = field(default_factory=set)
+    jira_key: str | None = None
+
+
+@dataclass
+class JiraIssueData:
+    """Metadata for a JIRA issue used in the output table."""
+
+    title: str
+    url: str
+    rank: str = ""
+    closed: bool = False
