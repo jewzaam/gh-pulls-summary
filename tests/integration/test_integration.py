@@ -320,7 +320,7 @@ class TestEndToEndIntegration(IntegrationTestBase):
             column_title = None
             sort_column = "date"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50
@@ -411,7 +411,7 @@ class TestRealWorldScenarios(IntegrationTestBase):
                 column_title = None
                 sort_column = sort_col
                 include_rank = False
-                jira_issue_pattern = r"(ANSTRAT-\d+)"
+                jira_issue_pattern = r"(PROJ-\d+)"
                 jira_include = None
                 jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
                 jira_metadata_row_search_depth = 50

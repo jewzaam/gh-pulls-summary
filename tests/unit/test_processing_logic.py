@@ -221,7 +221,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             url_from_pr_content=None,
             sort_column="date",
             include_rank=False,
-            jira_issue_pattern=r"(ANSTRAT-\d+)",
+            jira_issue_pattern=r"(PROJ-\d+)",
             jira_include=None,
             jira_url=None,
             jira_user=None,
@@ -268,7 +268,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             None,
             None,
             jira_client=None,
-            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_issue_patterns=[r"(PROJ-\d+)"],
             jira_include=None,
             jira_metadata_row_pattern=args.jira_metadata_row_pattern,
             jira_metadata_search_depth=args.jira_metadata_row_search_depth,
@@ -290,7 +290,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             column_title = ["date=Ready Date", "approvals=Total Approvals"]
             sort_column = "date"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50
@@ -343,7 +343,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
             column_title = None
             sort_column = "title"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50

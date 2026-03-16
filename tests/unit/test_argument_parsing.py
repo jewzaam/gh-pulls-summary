@@ -92,16 +92,16 @@ class TestArgumentParsing(unittest.TestCase):
             "--repo",
             "repo",
             "--jira-include",
-            "ANSTRAT-1234",
+            "PROJ-1234",
             "--jira-include",
-            "ANSTRAT-5678",
+            "PROJ-5678",
         ],
     )
     def test_parse_arguments_with_jira_include(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
         self.assertEqual(args.repo, "repo")
-        self.assertEqual(args.jira_include, ["ANSTRAT-1234", "ANSTRAT-5678"])
+        self.assertEqual(args.jira_include, ["PROJ-1234", "PROJ-5678"])
 
     @patch(
         "sys.argv",

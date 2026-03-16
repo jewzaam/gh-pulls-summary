@@ -323,11 +323,11 @@ class TestJiraClient(unittest.TestCase):
         mock_make_request.return_value = {
             "issues": [
                 {
-                    "key": "ANSTRAT-1",
+                    "key": "PROJ-1",
                     "fields": {"summary": "Test 1", "customfield_12345": "0|i00001"},
                 },
                 {
-                    "key": "ANSTRAT-3",
+                    "key": "PROJ-3",
                     "fields": {"summary": "Test 3", "customfield_12345": "0|i00003"},
                 },
             ]
@@ -340,7 +340,7 @@ class TestJiraClient(unittest.TestCase):
             rank_field_id="customfield_12345",
         )
 
-        result = client.get_issues_metadata(["ANSTRAT-1", "ANSTRAT-2", "ANSTRAT-3"])
+        result = client.get_issues_metadata(["PROJ-1", "PROJ-2", "PROJ-3"])
 
         # Should use v3 batch search/jql API
         mock_make_request.assert_called_once()
@@ -349,11 +349,11 @@ class TestJiraClient(unittest.TestCase):
         self.assertIn("jql", call_args[1]["params"])
         self.assertIn("/rest/api/3/", call_args[1]["api_base"])
 
-        # Should return two successful fetches (ANSTRAT-2 not found)
+        # Should return two successful fetches (PROJ-2 not found)
         self.assertEqual(len(result), 2)
-        self.assertIn("ANSTRAT-1", result)
-        self.assertIn("ANSTRAT-3", result)
-        self.assertNotIn("ANSTRAT-2", result)
+        self.assertIn("PROJ-1", result)
+        self.assertIn("PROJ-3", result)
+        self.assertNotIn("PROJ-2", result)
 
 
 class TestJiraIntegrationFunctions(unittest.TestCase):
@@ -364,18 +364,18 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         from gh_pulls_summary.main import extract_jira_issue_keys
 
         url_dict = {
-            "ANSTRAT-1660": "https://issues.redhat.com/browse/ANSTRAT-1660",
-            "ANSTRAT-1579": "https://issues.redhat.com/browse/ANSTRAT-1579",
+            "PROJ-1660": "https://jira.example.com/browse/PROJ-1660",
+            "PROJ-1579": "https://jira.example.com/browse/PROJ-1579",
         }
 
-        issue_keys = extract_jira_issue_keys(url_dict, r"(ANSTRAT-\d+)")
-        self.assertEqual(issue_keys, ["ANSTRAT-1579", "ANSTRAT-1660"])
+        issue_keys = extract_jira_issue_keys(url_dict, r"(PROJ-\d+)")
+        self.assertEqual(issue_keys, ["PROJ-1579", "PROJ-1660"])
 
     def test_extract_jira_issue_keys_empty(self):
         """Test extracting JIRA issue keys from empty dict."""
         from gh_pulls_summary.main import extract_jira_issue_keys
 
-        issue_keys = extract_jira_issue_keys({}, r"(ANSTRAT-\d+)")
+        issue_keys = extract_jira_issue_keys({}, r"(PROJ-\d+)")
         self.assertEqual(issue_keys, [])
 
     def test_extract_jira_issue_keys_no_match(self):
@@ -384,7 +384,7 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         url_dict = {"GitHub": "https://github.com/org/repo"}
 
-        issue_keys = extract_jira_issue_keys(url_dict, r"(ANSTRAT-\d+)")
+        issue_keys = extract_jira_issue_keys(url_dict, r"(PROJ-\d+)")
         self.assertEqual(issue_keys, [])
 
     @patch("gh_pulls_summary.main.JiraClient")
@@ -400,8 +400,8 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         # Pre-fetched metadata cache
         jira_metadata_cache = {
-            "ANSTRAT-1660": {
-                "key": "ANSTRAT-1660",
+            "PROJ-1660": {
+                "key": "PROJ-1660",
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "In Progress"},
@@ -412,13 +412,13 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         }
 
         # Issue keys extracted from PR
-        issue_keys = ["ANSTRAT-1660"]
+        issue_keys = ["PROJ-1660"]
 
         rank, closed_keys = get_rank_for_pr(
             mock_client, issue_keys, jira_metadata_cache
         )
         # Pipe should be replaced with underscore, issue key appended
-        self.assertEqual(rank, "0_i00ywg:9 ANSTRAT-1660")
+        self.assertEqual(rank, "0_i00ywg:9 PROJ-1660")
         self.assertEqual(closed_keys, set())
 
     @patch("gh_pulls_summary.main.JiraClient")
@@ -434,8 +434,8 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         # Pre-fetched metadata cache - only contains 1660
         jira_metadata_cache = {
-            "ANSTRAT-1660": {
-                "key": "ANSTRAT-1660",
+            "PROJ-1660": {
+                "key": "PROJ-1660",
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "Backlog"},
@@ -446,13 +446,13 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         }
 
         # Issue keys extracted from PR (metadata table specified 1660 as primary)
-        issue_keys = ["ANSTRAT-1660"]
+        issue_keys = ["PROJ-1660"]
 
         rank, closed_keys = get_rank_for_pr(
             mock_client, issue_keys, jira_metadata_cache
         )
         # Should return rank for the primary issue
-        self.assertEqual(rank, "0_i00ywh: ANSTRAT-1660")
+        self.assertEqual(rank, "0_i00ywh: PROJ-1660")
         self.assertEqual(closed_keys, set())
 
     @patch("gh_pulls_summary.main.JiraClient")
@@ -468,8 +468,8 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         # Pre-fetched metadata cache
         jira_metadata_cache = {
-            "ANSTRAT-1660": {
-                "key": "ANSTRAT-1660",
+            "PROJ-1660": {
+                "key": "PROJ-1660",
                 "fields": {
                     "issuetype": {"name": "Outcome"},
                     "status": {"name": "In Progress"},
@@ -480,7 +480,7 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         }
 
         # Issue keys extracted from PR
-        issue_keys = ["ANSTRAT-1660"]
+        issue_keys = ["PROJ-1660"]
 
         rank, closed_keys = get_rank_for_pr(
             mock_client, issue_keys, jira_metadata_cache
@@ -493,7 +493,7 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         """Test getting rank with no JIRA client."""
         from gh_pulls_summary.main import get_rank_for_pr
 
-        issue_keys = ["ANSTRAT-1660"]
+        issue_keys = ["PROJ-1660"]
         jira_metadata_cache = {}
 
         rank, closed_keys = get_rank_for_pr(None, issue_keys, jira_metadata_cache)
@@ -513,8 +513,8 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
 
         # Pre-fetched metadata cache
         jira_metadata_cache = {
-            "ANSTRAT-1660": {
-                "key": "ANSTRAT-1660",
+            "PROJ-1660": {
+                "key": "PROJ-1660",
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "Release Pending"},
@@ -525,7 +525,7 @@ class TestJiraIntegrationFunctions(unittest.TestCase):
         }
 
         # Issue keys extracted from PR
-        issue_keys = ["ANSTRAT-1660"]
+        issue_keys = ["PROJ-1660"]
 
         rank, closed_keys = get_rank_for_pr(
             mock_client, issue_keys, jira_metadata_cache
@@ -543,20 +543,20 @@ class TestFileContentExtraction(unittest.TestCase):
         from gh_pulls_summary.main import extract_jira_from_file_contents
 
         file_contents = [
-            "Some content with ANSTRAT-1660",
-            "Another file mentioning ANSTRAT-1234",
-            "And ANSTRAT-1660 again",  # duplicate should be handled
+            "Some content with PROJ-1660",
+            "Another file mentioning PROJ-1234",
+            "And PROJ-1660 again",  # duplicate should be handled
         ]
 
-        issue_keys = extract_jira_from_file_contents(file_contents, [r"(ANSTRAT-\d+)"])
+        issue_keys = extract_jira_from_file_contents(file_contents, [r"(PROJ-\d+)"])
         # Should return sorted unique keys
-        self.assertEqual(issue_keys, ["ANSTRAT-1234", "ANSTRAT-1660"])
+        self.assertEqual(issue_keys, ["PROJ-1234", "PROJ-1660"])
 
     def test_extract_jira_from_file_contents_empty(self):
         """Test with empty file contents list."""
         from gh_pulls_summary.main import extract_jira_from_file_contents
 
-        issue_keys = extract_jira_from_file_contents([], [r"(ANSTRAT-\d+)"])
+        issue_keys = extract_jira_from_file_contents([], [r"(PROJ-\d+)"])
         self.assertEqual(issue_keys, [])
 
     def test_extract_jira_from_file_contents_no_matches(self):
@@ -565,7 +565,7 @@ class TestFileContentExtraction(unittest.TestCase):
 
         file_contents = ["Just some regular content", "No issues here"]
 
-        issue_keys = extract_jira_from_file_contents(file_contents, [r"(ANSTRAT-\d+)"])
+        issue_keys = extract_jira_from_file_contents(file_contents, [r"(PROJ-\d+)"])
         self.assertEqual(issue_keys, [])
 
     def test_extract_jira_from_file_contents_multiple_patterns(self):
@@ -573,16 +573,16 @@ class TestFileContentExtraction(unittest.TestCase):
         from gh_pulls_summary.main import extract_jira_from_file_contents
 
         file_contents = [
-            "Some content with ANSTRAT-1660",
-            "Another file mentioning OTHERJIRA-5678",
-            "And ANSTRAT-1234",
+            "Some content with PROJ-1660",
+            "Another file mentioning OTHER-5678",
+            "And PROJ-1234",
         ]
 
         issue_keys = extract_jira_from_file_contents(
-            file_contents, [r"(ANSTRAT-\d+)", r"(OTHERJIRA-\d+)"]
+            file_contents, [r"(PROJ-\d+)", r"(OTHER-\d+)"]
         )
         # Should return sorted unique keys from both patterns
-        self.assertEqual(issue_keys, ["ANSTRAT-1234", "ANSTRAT-1660", "OTHERJIRA-5678"])
+        self.assertEqual(issue_keys, ["OTHER-5678", "PROJ-1234", "PROJ-1660"])
 
 
 class TestMetadataExtraction(unittest.TestCase):
@@ -595,25 +595,25 @@ class TestMetadataExtraction(unittest.TestCase):
         pr_body = """
 # Some PR Title
 
-| **Feature / Initiative** | [ANSTRAT-1586](https://issues.redhat.com/browse/ANSTRAT-1586) |
+| **Feature / Initiative** | [PROJ-1586](https://jira.example.com/browse/PROJ-1586) |
 | **Description** | Test description |
 
-Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-1234) references.
+Some other content with [PROJ-1234](https://jira.example.com/browse/PROJ-1234) references.
 """
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            pr_body, [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
-        self.assertEqual(issues, ["ANSTRAT-1586"])
+        self.assertEqual(issues, ["PROJ-1586"])
 
     def test_extract_primary_jira_no_spaces(self):
         """Test extracting JIRA from metadata table without spaces."""
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
-        pr_body = "|**Feature/Initiative**|[ANSTRAT-1738](https://issues.redhat.com/browse/ANSTRAT-1738)|"
+        pr_body = "|**Feature/Initiative**|[PROJ-1738](https://jira.example.com/browse/PROJ-1738)|"
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            pr_body, [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
-        self.assertEqual(issues, ["ANSTRAT-1738"])
+        self.assertEqual(issues, ["PROJ-1738"])
 
     def test_extract_primary_jira_not_found(self):
         """Test when metadata table is not present."""
@@ -621,7 +621,7 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
 
         pr_body = "Some PR body without metadata table"
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            pr_body, [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
         self.assertEqual(issues, [])
 
@@ -630,7 +630,7 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
         issues = extract_primary_jira_from_metadata(
-            "", [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            "", [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
         self.assertEqual(issues, [])
 
@@ -641,10 +641,10 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         # Create a body with the metadata table beyond line 50
         pr_body = (
             "\n".join(["line"] * 60)
-            + "\n| **Feature / Initiative** | [ANSTRAT-1586](url) |"
+            + "\n| **Feature / Initiative** | [PROJ-1586](url) |"
         )
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            pr_body, [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
         self.assertEqual(issues, [])
 
@@ -652,38 +652,36 @@ Some other content with [ANSTRAT-1234](https://issues.redhat.com/browse/ANSTRAT-
         """Test extracting JIRA with multiple patterns."""
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
-        pr_body = "| **Feature / Initiative** | [OTHERJIRA-5678](url) |"
+        pr_body = "| **Feature / Initiative** | [OTHER-5678](url) |"
         issues = extract_primary_jira_from_metadata(
             pr_body,
-            [r"(ANSTRAT-\d+)", r"(OTHERJIRA-\d+)"],
+            [r"(PROJ-\d+)", r"(OTHER-\d+)"],
             r"feature\s*/?\s*initiative",
             50,
         )
-        # Should find the OTHERJIRA issue using the second pattern
-        self.assertEqual(issues, ["OTHERJIRA-5678"])
+        # Should find the OTHER issue using the second pattern
+        self.assertEqual(issues, ["OTHER-5678"])
 
     def test_extract_primary_jira_multiple_issues_in_row(self):
         """Test extracting multiple JIRA issues from same metadata row."""
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
-        pr_body = (
-            "| **Feature / Initiative** | [ANSTRAT-1567](url1), [ANSTRAT-1738](url2) |"
-        )
+        pr_body = "| **Feature / Initiative** | [PROJ-1567](url1), [PROJ-1738](url2) |"
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            pr_body, [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
         # Should find both issues
-        self.assertEqual(issues, ["ANSTRAT-1567", "ANSTRAT-1738"])
+        self.assertEqual(issues, ["PROJ-1567", "PROJ-1738"])
 
     def test_extract_primary_jira_case_insensitive(self):
         """Test that feature/initiative matching is case-insensitive."""
         from gh_pulls_summary.main import extract_primary_jira_from_metadata
 
-        pr_body = "| **FEATURE / INITIATIVE** | [ANSTRAT-9999](url) |"
+        pr_body = "| **FEATURE / INITIATIVE** | [PROJ-9999](url) |"
         issues = extract_primary_jira_from_metadata(
-            pr_body, [r"(ANSTRAT-\d+)"], r"feature\s*/?\s*initiative", 50
+            pr_body, [r"(PROJ-\d+)"], r"feature\s*/?\s*initiative", 50
         )
-        self.assertEqual(issues, ["ANSTRAT-9999"])
+        self.assertEqual(issues, ["PROJ-9999"])
 
 
 class TestFileContentFetchingWithJira(unittest.TestCase):
@@ -732,7 +730,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
 
         # Mock file content
         mock_fetch_file_content.return_value = (
-            "# SDP\n| **Feature / Initiative** | [ANSTRAT-1234](url) |"
+            "# SDP\n| **Feature / Initiative** | [PROJ-1234](url) |"
         )
 
         # Mock other dependencies
@@ -744,7 +742,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
         jira_client = Mock(spec=JiraClient)
         jira_client.base_url = "https://issues.example.com"
         jira_client.get_issues_metadata.return_value = {
-            "ANSTRAT-1234": {
+            "PROJ-1234": {
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "In Progress"},
@@ -765,7 +763,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
             "repo",
             file_include=file_include,
             jira_client=jira_client,
-            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_issue_patterns=[r"(PROJ-\d+)"],
             jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
             jira_metadata_search_depth=50,
             github_token="test_token",
@@ -779,7 +777,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
         # Verify results include rank
         self.assertEqual(len(pull_requests), 1)
         self.assertIn("rank", pull_requests[0])
-        self.assertIn("ANSTRAT-1234", pull_requests[0]["rank"])
+        self.assertIn("PROJ-1234", pull_requests[0]["rank"])
 
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_reviews")
@@ -831,7 +829,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
             "repo",
             file_include=file_include,
             jira_client=jira_client,
-            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
+            jira_issue_patterns=[r"(PROJ-\d+)"],
             jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
             jira_metadata_search_depth=50,
             github_token="test_token",
@@ -873,7 +871,7 @@ class TestJiraInclude(unittest.TestCase):
         jira_client = Mock(spec=JiraClient)
         jira_client.base_url = "https://issues.example.com"
         jira_client.get_issues_metadata.return_value = {
-            "ANSTRAT-1234": {
+            "PROJ-1234": {
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "Backlog"},
@@ -892,8 +890,8 @@ class TestJiraInclude(unittest.TestCase):
             "owner",
             "repo",
             jira_client=jira_client,
-            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
-            jira_include=["ANSTRAT-1234"],
+            jira_issue_patterns=[r"(PROJ-\d+)"],
+            jira_include=["PROJ-1234"],
             jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
             jira_metadata_search_depth=50,
             github_token="test_token",
@@ -904,12 +902,12 @@ class TestJiraInclude(unittest.TestCase):
 
         # Verify JIRA issues dict was populated with the jira-include issue
         self.assertEqual(len(jira_issues), 1)
-        self.assertIn("ANSTRAT-1234", jira_issues)
+        self.assertIn("PROJ-1234", jira_issues)
         # Verify JIRA data is populated correctly
-        jira_data = jira_issues["ANSTRAT-1234"]
+        jira_data = jira_issues["PROJ-1234"]
         self.assertIsNotNone(jira_data["title"])
-        self.assertIn("browse/ANSTRAT-1234", jira_data["url"])
-        self.assertIn("ANSTRAT-1234", jira_data["rank"])
+        self.assertIn("browse/PROJ-1234", jira_data["url"])
+        self.assertIn("PROJ-1234", jira_data["rank"])
 
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_reviews")
@@ -938,7 +936,7 @@ class TestJiraInclude(unittest.TestCase):
                 "html_url": "url1",
                 "draft": False,
                 "created_at": "2025-05-01T12:00:00Z",
-                "body": "| **Feature / Initiative** | [ANSTRAT-1234](url) |",
+                "body": "| **Feature / Initiative** | [PROJ-1234](url) |",
                 "head": {},
             }
         ]
@@ -953,7 +951,7 @@ class TestJiraInclude(unittest.TestCase):
         jira_client = Mock(spec=JiraClient)
         jira_client.base_url = "https://issues.example.com"
         jira_client.get_issues_metadata.return_value = {
-            "ANSTRAT-1234": {
+            "PROJ-1234": {
                 "fields": {
                     "issuetype": {"name": "Feature"},
                     "status": {"name": "In Progress"},
@@ -971,8 +969,8 @@ class TestJiraInclude(unittest.TestCase):
             "owner",
             "repo",
             jira_client=jira_client,
-            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
-            jira_include=["ANSTRAT-1234"],
+            jira_issue_patterns=[r"(PROJ-\d+)"],
+            jira_include=["PROJ-1234"],
             jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
             jira_metadata_search_depth=50,
             github_token="test_token",
@@ -981,7 +979,7 @@ class TestJiraInclude(unittest.TestCase):
         # Verify only one entry (the PR, not a duplicate synthetic entry)
         self.assertEqual(len(pull_requests), 1)
         self.assertEqual(pull_requests[0]["number"], 1)
-        self.assertIn("ANSTRAT-1234", pull_requests[0]["rank"])
+        self.assertIn("PROJ-1234", pull_requests[0]["rank"])
 
     @patch("gh_pulls_summary.main.fetch_reviews")
     @patch("gh_pulls_summary.main.fetch_user_details")
@@ -1010,7 +1008,7 @@ class TestJiraInclude(unittest.TestCase):
         jira_client = Mock(spec=JiraClient)
         jira_client.base_url = "https://issues.example.com"
         jira_client.get_issues_metadata.return_value = {
-            "ANSTRAT-9999": {
+            "PROJ-9999": {
                 "fields": {
                     "issuetype": {"name": "Outcome"},  # Not Feature or Initiative
                     "status": {"name": "Backlog"},
@@ -1028,8 +1026,8 @@ class TestJiraInclude(unittest.TestCase):
             "owner",
             "repo",
             jira_client=jira_client,
-            jira_issue_patterns=[r"(ANSTRAT-\d+)"],
-            jira_include=["ANSTRAT-9999"],
+            jira_issue_patterns=[r"(PROJ-\d+)"],
+            jira_include=["PROJ-9999"],
             jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
             jira_metadata_search_depth=50,
             github_token="test_token",
@@ -1054,27 +1052,27 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
         mock_fetch_user_details,
     ):
         """
-        Test that when a PR references a non-Feature/Initiative issue (e.g., SDP, Proposal, AAP),
+        Test that when a PR references a non-Feature/Initiative issue (e.g., SDP, Proposal, CHILD),
         the code traverses up the JIRA hierarchy to find the Feature or Initiative ancestor
         and uses that for ranking.
 
-        Real-world example: PR #965 references AAP-60030, which rolls up to ANSTRAT-1780.
-        The rank should come from ANSTRAT-1780 (Feature), not fail because AAP-60030 is not
+        Real-world example: PR #965 references CHILD-60030, which rolls up to PROJ-1780.
+        The rank should come from PROJ-1780 (Feature), not fail because CHILD-60030 is not
         a Feature/Initiative.
         """
         from gh_pulls_summary.jira_client import JiraClient
         from gh_pulls_summary.main import fetch_and_process_pull_requests
 
-        # Mock a single PR referencing AAP-60030
+        # Mock a single PR referencing CHILD-60030
         mock_fetch_pull_requests.return_value = [
             {
                 "number": 965,
-                "title": "Test PR with AAP reference",
+                "title": "Test PR with CHILD reference",
                 "user": {"login": "testuser"},
                 "draft": False,
                 "created_at": "2025-01-01T00:00:00Z",
                 "html_url": "https://github.com/owner/repo/pull/965",
-                "body": "| **Feature / Initiative** | [AAP-60030](https://issues.example.com/browse/AAP-60030) |",
+                "body": "| **Feature / Initiative** | [CHILD-60030](https://issues.example.com/browse/CHILD-60030) |",
             }
         ]
 
@@ -1091,20 +1089,20 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
         jira_client = Mock(spec=JiraClient)
         jira_client.base_url = "https://issues.example.com"
 
-        # Mock metadata for both AAP-60030 (non-Feature) and ANSTRAT-1780 (Feature ancestor)
+        # Mock metadata for both CHILD-60030 (non-Feature) and PROJ-1780 (Feature ancestor)
         jira_client.get_issues_metadata.return_value = {
-            "AAP-60030": {
-                "key": "AAP-60030",
+            "CHILD-60030": {
+                "key": "CHILD-60030",
                 "fields": {
-                    "summary": "AAP Story",
+                    "summary": "CHILD Story",
                     "issuetype": {"name": "Story"},  # Not Feature or Initiative
                     "status": {"name": "Backlog"},
-                    "customfield_12345": None,  # No rank on AAP issue
+                    "customfield_12345": None,  # No rank on CHILD issue
                 },
                 "_rank_field_id": "customfield_12345",
             },
-            "ANSTRAT-1780": {
-                "key": "ANSTRAT-1780",
+            "PROJ-1780": {
+                "key": "PROJ-1780",
                 "fields": {
                     "summary": "Feature ancestor",
                     "issuetype": {"name": "Feature"},
@@ -1115,12 +1113,12 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
             },
         }
 
-        # Mock hierarchy traversal: AAP-60030 -> ANSTRAT-1780
+        # Mock hierarchy traversal: CHILD-60030 -> PROJ-1780
         def mock_get_ancestors_side_effect(issue_key, metadata_cache=None, max_depth=5):  # noqa: ARG001
-            if issue_key == "AAP-60030":
+            if issue_key == "CHILD-60030":
                 return [
                     {
-                        "key": "ANSTRAT-1780",
+                        "key": "PROJ-1780",
                         "fields": {
                             "issuetype": {"name": "Feature"},
                             "status": {"name": "Backlog"},
@@ -1152,7 +1150,7 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
             "owner",
             "repo",
             jira_client=jira_client,
-            jira_issue_patterns=[r"(AAP-\d+)", r"(ANSTRAT-\d+)"],
+            jira_issue_patterns=[r"(CHILD-\d+)", r"(PROJ-\d+)"],
             jira_metadata_row_pattern=r"feature\s*/?\s*initiative",
             jira_metadata_search_depth=50,
             github_token="test_token",
@@ -1161,13 +1159,13 @@ class TestJiraHierarchyTraversal(unittest.TestCase):
         # Verify: should have one PR
         self.assertEqual(len(pull_requests), 1)
 
-        # Verify: PR should have rank from ANSTRAT-1780 (the Feature ancestor)
+        # Verify: PR should have rank from PROJ-1780 (the Feature ancestor)
         pr = pull_requests[0]
         self.assertIsNotNone(pr.get("rank"))
-        self.assertIn("ANSTRAT-1780", pr["rank"])
+        self.assertIn("PROJ-1780", pr["rank"])
         self.assertIn("0|i00xyz:a", pr["rank"].replace("_", "|"))
 
-        # Verify: get_ancestors was called for AAP-60030
+        # Verify: get_ancestors was called for CHILD-60030
         jira_client.get_ancestors.assert_called()
 
     @patch("gh_pulls_summary.main.fetch_user_details")
@@ -1387,22 +1385,22 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
             "title": None,
             "number": None,
             "url": None,
-            "jira_key": "ANSTRAT-1234",
+            "jira_key": "PROJ-1234",
             "author_name": "",
             "author_url": "",
             "reviews": 0,
             "approvals": 0,
             "changes": "",
             "pr_body_urls_dict": {},
-            "rank": "0_i00001 ANSTRAT-1234",
+            "rank": "0_i00001 PROJ-1234",
         }
 
         # JIRA issues dict
         jira_issues = {
-            "ANSTRAT-1234": {
+            "PROJ-1234": {
                 "title": "Implement feature XYZ",
-                "url": "https://issues.example.com/browse/ANSTRAT-1234",
-                "rank": "0_i00001 ANSTRAT-1234",
+                "url": "https://issues.example.com/browse/PROJ-1234",
+                "rank": "0_i00001 PROJ-1234",
             }
         }
 
@@ -1412,7 +1410,7 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
 
         # Should have JIRA title linked to JIRA URL (no PR number)
         self.assertIn(
-            "[Implement feature XYZ](https://issues.example.com/browse/ANSTRAT-1234)",
+            "[Implement feature XYZ](https://issues.example.com/browse/PROJ-1234)",
             row,
         )
         # Should not have PR number format #[123]
@@ -1420,7 +1418,7 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
         # Should have empty fields for author, changes, approvals
         self.assertIn("|  |  |  |", row)  # Empty date, author, changes, approvals
         # Should have rank
-        self.assertIn("0_i00001 ANSTRAT-1234", row)
+        self.assertIn("0_i00001 PROJ-1234", row)
 
     def test_create_markdown_table_row_for_normal_pr(self):
         """Test that normal PR entries are formatted correctly in markdown."""
@@ -1438,7 +1436,7 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
             "approvals": 2,
             "changes": 0,
             "pr_body_urls_dict": {},
-            "rank": "0_i00002 ANSTRAT-5678",
+            "rank": "0_i00002 PROJ-5678",
         }
 
         row = create_markdown_table_row(
@@ -1454,7 +1452,7 @@ class TestMarkdownRowFormattingForSyntheticEntries(unittest.TestCase):
         # Should have reviews formatted
         self.assertIn("2 of 2", row)
         # Should have rank
-        self.assertIn("0_i00002 ANSTRAT-5678", row)
+        self.assertIn("0_i00002 PROJ-5678", row)
 
 
 class TestJiraClientAncestorMethods(unittest.TestCase):
