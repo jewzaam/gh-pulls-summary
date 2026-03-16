@@ -7,6 +7,7 @@ Minimal implementation focused on fetching issue metadata and rank information.
 
 import logging
 import os
+import re
 from typing import Any, cast
 from urllib.parse import urljoin
 
@@ -81,6 +82,9 @@ class JiraClient:
             {"Content-Type": "application/json", "Accept": "application/json"}
         )
 
+        # Valid JIRA issue key pattern for JQL sanitization
+        self._issue_key_pattern = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+
         # Use explicit rank field ID or cache for lazy discovery
         if rank_field_id:
             logging.info(f"Using explicit JIRA Rank field: {rank_field_id}")
@@ -97,6 +101,34 @@ class JiraClient:
 
         # Cache for individual issue data to avoid redundant API calls during hierarchy traversal
         self._issue_cache: dict[str, dict[str, Any]] = {}
+
+    def close(self) -> None:
+        """Close the HTTP session."""
+        self.session.close()
+
+    def __enter__(self) -> "JiraClient":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
+    def _sanitize_issue_keys(self, issue_keys: list[str]) -> list[str]:
+        """
+        Validate and filter issue keys to prevent JQL injection.
+
+        Args:
+            issue_keys: List of candidate issue keys
+
+        Returns:
+            List of valid issue keys matching the pattern PROJECT-123
+        """
+        valid_keys = []
+        for key in issue_keys:
+            if self._issue_key_pattern.match(key):
+                valid_keys.append(key)
+            else:
+                logging.warning(f"Skipping invalid JIRA issue key: {key!r}")
+        return valid_keys
 
     def _make_request(
         self,
@@ -339,6 +371,11 @@ class JiraClient:
         Raises:
             JiraClientError: If API request fails
         """
+        if not issue_keys:
+            return {}
+
+        # Sanitize issue keys to prevent JQL injection
+        issue_keys = self._sanitize_issue_keys(issue_keys)
         if not issue_keys:
             return {}
 

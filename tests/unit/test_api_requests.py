@@ -17,7 +17,7 @@ logging.basicConfig(
 
 
 class TestApiRequests(unittest.TestCase):
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_github_api_request_with_pagination(self, mock_get):
         # Mock paginated responses
         mock_get.side_effect = [
@@ -32,7 +32,7 @@ class TestApiRequests(unittest.TestCase):
         self.assertEqual(len(result), 3)
         self.assertEqual(result, [{"id": 1}, {"id": 2}, {"id": 3}])
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_github_api_request_with_dict_response(self, mock_get):
         # Mock a single dictionary response
         mock_get.return_value = MagicMock(
@@ -42,7 +42,7 @@ class TestApiRequests(unittest.TestCase):
         result = github_api_request("/test-endpoint", use_paging=False)
         self.assertEqual(result, {"key": "value"})
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_issue_events(self, mock_get):
         # Mock paginated responses for issue events
         mock_get.side_effect = [
@@ -63,7 +63,7 @@ class TestApiRequests(unittest.TestCase):
         self.assertEqual(result[0]["event"], "ready_for_review")
         self.assertEqual(result[1]["event"], "labeled")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_reviews(self, mock_get):
         # Mock paginated responses for reviews
         mock_get.side_effect = [
@@ -83,7 +83,7 @@ class TestApiRequests(unittest.TestCase):
         self.assertEqual(result[0]["state"], "APPROVED")
         self.assertEqual(result[1]["state"], "COMMENTED")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details(self, mock_get):
         # Mock user details response
         mock_get.return_value = MagicMock(
@@ -100,7 +100,7 @@ class TestApiRequests(unittest.TestCase):
         self.assertEqual(result["name"], "John Doe")
         self.assertEqual(result["html_url"], "https://github.com/johndoe")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_pull_requests(self, mock_get):
         # Mock paginated responses for pull requests
         mock_get.side_effect = [
@@ -120,7 +120,7 @@ class TestApiRequests(unittest.TestCase):
         self.assertEqual(result[1]["number"], 2)
         self.assertEqual(result[2]["number"], 3)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_pull_requests_with_review_requested_for(self, mock_get):
         """Test fetch_pull_requests fetches all PRs then filters using Search API intersection."""
         # Mock /pulls response (all PRs)

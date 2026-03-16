@@ -10,9 +10,9 @@ from gh_pulls_summary.main import RateLimitError, github_api_request
 class TestRateLimitRetry(unittest.TestCase):
     """Test rate limit retry logic in github_api_request."""
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_single_retry_success(self, mock_get, mock_time, mock_sleep):
         """Test successful retry after rate limit is hit once."""
         # Set up current time
@@ -45,9 +45,9 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify two requests were made
         self.assertEqual(mock_get.call_count, 2)
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_multiple_retries_success(self, mock_get, mock_time, mock_sleep):
         """Test successful retry after multiple rate limits."""
         # Set up current time
@@ -96,9 +96,9 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify three requests were made
         self.assertEqual(mock_get.call_count, 3)
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_max_retries_exceeded(self, mock_get, mock_time, mock_sleep):
         """Test that RateLimitError is raised after max retries."""
         # Set up current time
@@ -128,9 +128,9 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify 4 requests were made (initial + 3 retries)
         self.assertEqual(mock_get.call_count, 4)
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_wait_time_calculation(self, mock_get, mock_time, mock_sleep):
         """Test that wait time is correctly calculated from reset timestamp."""
         # Current time: 1000
@@ -156,9 +156,9 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify correct wait time
         mock_sleep.assert_called_once_with(235)
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_minimum_wait_time(self, mock_get, mock_time, mock_sleep):
         """Test that minimum wait time is enforced even if reset is in past."""
         # Current time: 1000
@@ -184,9 +184,9 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify minimum wait time of 1 second
         mock_sleep.assert_called_once_with(1)
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_no_retry_on_non_rate_limit_403(self, mock_get, mock_time, mock_sleep):
         """Test that 403 without rate limit headers doesn't trigger retry."""
         mock_time.return_value = 1000
@@ -211,9 +211,9 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify only one request was made (no retry)
         mock_get.assert_called_once()
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_no_retry_on_403_with_nonzero_remaining(
         self, mock_get, mock_time, mock_sleep
     ):
@@ -243,10 +243,10 @@ class TestRateLimitRetry(unittest.TestCase):
         # Verify only one request was made (no retry)
         mock_get.assert_called_once()
 
-    @patch("gh_pulls_summary.main.logging.warning")
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.logging.warning")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_retry_logging(
         self, mock_get, mock_time, mock_sleep, mock_logging
     ):
@@ -279,9 +279,9 @@ class TestRateLimitRetry(unittest.TestCase):
         self.assertIn("Wait duration: 61 seconds", log_message)
         self.assertIn("(retry 1/3)", log_message)
 
-    @patch("gh_pulls_summary.main.time.sleep")
-    @patch("gh_pulls_summary.main.time.time")
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.time.sleep")
+    @patch("gh_pulls_summary.github_api.time.time")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_rate_limit_with_pagination(self, mock_get, mock_time, mock_sleep):
         """Test rate limit retry works correctly with pagination."""
         mock_time.return_value = 1000

@@ -3,6 +3,7 @@
 Unit tests for JIRA client functionality.
 """
 
+import os
 import unittest
 from unittest.mock import Mock, patch
 
@@ -15,6 +16,20 @@ from gh_pulls_summary.jira_client import (
 
 class TestJiraClient(unittest.TestCase):
     """Tests for JiraClient class."""
+
+    def setUp(self):
+        """Clear JIRA env vars to ensure test isolation."""
+        self._saved_env = {}
+        for var in ("JIRA_BASE_URL", "JIRA_USER", "JIRA_TOKEN"):
+            self._saved_env[var] = os.environ.pop(var, None)
+
+    def tearDown(self):
+        """Restore JIRA env vars."""
+        for var, value in self._saved_env.items():
+            if value is not None:
+                os.environ[var] = value
+            else:
+                os.environ.pop(var, None)
 
     def test_init_missing_token(self):
         """Test initialization fails without token."""
@@ -2014,6 +2029,177 @@ class TestJiraRateLimitRetry(unittest.TestCase):
         self.assertEqual(mock_sleep.call_count, 2)
         calls = [call[0][0] for call in mock_sleep.call_args_list]
         self.assertEqual(calls, [2, 4])
+
+
+class TestJqlSanitization(unittest.TestCase):
+    """Tests for JQL injection prevention."""
+
+    def test_sanitize_valid_keys(self):
+        """Test that valid issue keys pass sanitization."""
+        client = JiraClient(
+            base_url="https://jira.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
+        keys = ["PROJ-123", "ABC-1", "MYPROJECT-99999"]
+        result = client._sanitize_issue_keys(keys)
+        self.assertEqual(result, keys)
+
+    def test_sanitize_rejects_invalid_keys(self):
+        """Test that invalid keys are filtered out."""
+        client = JiraClient(
+            base_url="https://jira.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
+        keys = [
+            "PROJ-123",  # valid
+            "not-a-key",  # lowercase
+            "PROJ 123",  # space
+            "PROJ-123; DROP",  # injection attempt
+            "",  # empty
+            "123-PROJ",  # numbers first
+            "PROJ-",  # no number
+            "PROJ-0",  # valid
+        ]
+        result = client._sanitize_issue_keys(keys)
+        self.assertEqual(result, ["PROJ-123", "PROJ-0"])
+
+    def test_sanitize_empty_list(self):
+        """Test sanitization of empty list."""
+        client = JiraClient(
+            base_url="https://jira.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
+        self.assertEqual(client._sanitize_issue_keys([]), [])
+
+
+class TestJiraClientSessionManagement(unittest.TestCase):
+    """Tests for JiraClient session lifecycle."""
+
+    def test_close_closes_session(self):
+        """Test that close() closes the HTTP session."""
+        client = JiraClient(
+            base_url="https://jira.example.com",
+            user="test@example.com",
+            token="testtoken",
+        )
+        client.session = Mock()
+        client.close()
+        client.session.close.assert_called_once()
+
+    def test_context_manager(self):
+        """Test JiraClient as context manager."""
+        with JiraClient(
+            base_url="https://jira.example.com",
+            user="test@example.com",
+            token="testtoken",
+        ) as client:
+            client.session = Mock()
+
+        client.session.close.assert_called_once()
+
+
+class TestExtractIssueKeysFromPr(unittest.TestCase):
+    """Tests for extract_issue_keys_from_pr orchestration."""
+
+    def test_priority_1_pr_body_metadata(self):
+        """Test that PR body metadata is checked first."""
+        from gh_pulls_summary.main import extract_issue_keys_from_pr
+
+        pr_body = "| **Feature / Initiative** | [PROJ-100](url) |"
+        file_contents = ["Some content with PROJ-200"]
+
+        result = extract_issue_keys_from_pr(
+            file_contents,
+            [r"(PROJ-\d+)"],
+            pr_body,
+            r"feature\s*/?\s*initiative",
+            50,
+        )
+        # Should find PROJ-100 from PR body, not PROJ-200 from file contents
+        self.assertEqual(result, ["PROJ-100"])
+
+    def test_priority_2_file_metadata(self):
+        """Test fallback to file content metadata when PR body has no metadata."""
+        from gh_pulls_summary.main import extract_issue_keys_from_pr
+
+        pr_body = "Just a PR description with no metadata table"
+        file_contents = ["| **Feature / Initiative** | [PROJ-300](url) |"]
+
+        result = extract_issue_keys_from_pr(
+            file_contents,
+            [r"(PROJ-\d+)"],
+            pr_body,
+            r"feature\s*/?\s*initiative",
+            50,
+        )
+        self.assertEqual(result, ["PROJ-300"])
+
+    def test_priority_3_full_file_contents(self):
+        """Test fallback to full file content search."""
+        from gh_pulls_summary.main import extract_issue_keys_from_pr
+
+        pr_body = "No metadata here"
+        file_contents = ["Some text mentioning PROJ-400 in the content"]
+
+        result = extract_issue_keys_from_pr(
+            file_contents,
+            [r"(PROJ-\d+)"],
+            pr_body,
+            r"feature\s*/?\s*initiative",
+            50,
+        )
+        self.assertEqual(result, ["PROJ-400"])
+
+    def test_no_patterns_returns_empty(self):
+        """Test that empty patterns list returns no results."""
+        from gh_pulls_summary.main import extract_issue_keys_from_pr
+
+        result = extract_issue_keys_from_pr(
+            ["PROJ-123 content"],
+            [],
+            "PROJ-456 body",
+            r"feature\s*/?\s*initiative",
+            50,
+        )
+        self.assertEqual(result, [])
+
+    def test_no_body_no_files(self):
+        """Test with no PR body and no file contents."""
+        from gh_pulls_summary.main import extract_issue_keys_from_pr
+
+        result = extract_issue_keys_from_pr(
+            [],
+            [r"(PROJ-\d+)"],
+            None,
+            r"feature\s*/?\s*initiative",
+            50,
+        )
+        self.assertEqual(result, [])
+
+
+class TestErrorReturnType(unittest.TestCase):
+    """Tests for fetch_and_process_pull_requests error return type."""
+
+    @patch("gh_pulls_summary.main.fetch_single_pull_request")
+    def test_single_pr_not_found_returns_tuple(self, mock_fetch):
+        """Test that failed single PR fetch returns ([], {}) not []."""
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        mock_fetch.return_value = None
+        result = fetch_and_process_pull_requests("owner", "repo", pr_number=999)
+        self.assertEqual(result, ([], {}))
+
+    @patch("gh_pulls_summary.main.fetch_pull_requests")
+    def test_all_prs_fetch_failure_returns_tuple(self, mock_fetch):
+        """Test that failed PR list fetch returns ([], {}) not []."""
+        from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        mock_fetch.return_value = None
+        result = fetch_and_process_pull_requests("owner", "repo")
+        self.assertEqual(result, ([], {}))
 
 
 if __name__ == "__main__":

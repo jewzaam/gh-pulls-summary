@@ -17,7 +17,7 @@ from gh_pulls_summary.main import (
 
 
 class TestErrorConditions(unittest.TestCase):
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_github_api_request_http_error(self, mock_get):
         """Test github_api_request with HTTP error response."""
         mock_response = Mock()
@@ -30,7 +30,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIn("GitHub API endpoint not found", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_github_api_request_json_error(self, mock_get):
         """Test github_api_request when JSON parsing fails."""
         mock_response = Mock()
@@ -43,7 +43,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIn("Invalid JSON response from GitHub API", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_github_api_request_network_error(self, mock_get):
         """Test github_api_request with network error."""
         mock_get.side_effect = requests.exceptions.ConnectionError("Network error")
@@ -67,7 +67,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIn("Invalid sort column", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_success(self, mock_get):
         """Test fetch_user_details with successful response."""
         mock_response = Mock()
@@ -87,7 +87,7 @@ class TestErrorConditions(unittest.TestCase):
             self.assertEqual(result["name"], "Test User")
             self.assertEqual(result["html_url"], "https://github.com/testuser")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_404_error(self, mock_get):
         """Test fetch_user_details returns None for 404 error."""
         mock_response = Mock()
@@ -98,7 +98,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_copilot_user(self, mock_get):
         """Test fetch_user_details returns None for GitHub Copilot user (common 404 case)."""
         mock_response = Mock()
@@ -109,7 +109,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_empty_username(self, mock_get):
         """Test fetch_user_details with empty username."""
         mock_response = Mock()
@@ -123,7 +123,7 @@ class TestErrorConditions(unittest.TestCase):
         if result is not None:
             self.assertEqual(result["login"], "")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_rate_limit_error(self, mock_get):
         """Test fetch_user_details raises RateLimitError for rate limit error."""
         mock_response = Mock()
@@ -136,20 +136,21 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIn("GitHub API rate limit exceeded", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_other_http_error(self, mock_get):
         """Test fetch_user_details raises GitHubAPIError for other HTTP errors."""
         mock_response = Mock()
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
+        mock_response.headers = {}
         mock_get.return_value = mock_response
 
         with self.assertRaises(GitHubAPIError) as ctx:
             fetch_user_details("testuser")
 
-        self.assertIn("Failed to fetch user details", str(ctx.exception))
+        self.assertIn("GitHub API request failed", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_network_error(self, mock_get):
         """Test fetch_user_details raises NetworkError for network errors."""
         mock_get.side_effect = requests.exceptions.ConnectionError("Network error")
@@ -159,7 +160,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIn("Network connection failed", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_json_parse_error(self, mock_get):
         """Test fetch_user_details raises GitHubAPIError when JSON parsing fails."""
         mock_response = Mock()
@@ -172,7 +173,7 @@ class TestErrorConditions(unittest.TestCase):
 
         self.assertIn("Invalid JSON response", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_user_details_403_without_rate_limit(self, mock_get):
         """Test fetch_user_details raises GitHubAPIError for 403 without rate limit headers."""
         mock_response = Mock()
@@ -184,7 +185,7 @@ class TestErrorConditions(unittest.TestCase):
         with self.assertRaises(GitHubAPIError) as ctx:
             fetch_user_details("testuser")
 
-        self.assertIn("Failed to fetch user details", str(ctx.exception))
+        self.assertIn("GitHub API request failed", str(ctx.exception))
 
 
 if __name__ == "__main__":
