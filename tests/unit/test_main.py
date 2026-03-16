@@ -572,7 +572,7 @@ class TestMainFunction(unittest.TestCase):
 
 
 class TestGithubApiHelpers(unittest.TestCase):
-    @patch("gh_pulls_summary.main.github_api_request")
+    @patch("gh_pulls_summary.github_api.github_api_request")
     def test_fetch_single_pull_request(self, mock_github_api_request):
         mock_github_api_request.return_value = {"number": 42, "title": "Test PR"}
         result = fetch_single_pull_request("owner", "repo", 42)
@@ -585,7 +585,7 @@ class TestGithubApiHelpers(unittest.TestCase):
         self.assertIn("headers", call_args[1])
         self.assertEqual(result, {"number": 42, "title": "Test PR"})
 
-    @patch("gh_pulls_summary.main.github_api_request")
+    @patch("gh_pulls_summary.github_api.github_api_request")
     def test_fetch_pr_files(self, mock_github_api_request):
         mock_github_api_request.return_value = [
             {"filename": "file1.py"},
@@ -601,7 +601,7 @@ class TestGithubApiHelpers(unittest.TestCase):
         self.assertIn("headers", call_args[1])
         self.assertEqual(result, [{"filename": "file1.py"}, {"filename": "file2.py"}])
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_pr_diff(self, mock_requests_get):
         from gh_pulls_summary.main import GitHubAPIError
 
@@ -621,7 +621,7 @@ class TestGithubApiHelpers(unittest.TestCase):
             fetch_pr_diff("owner", "repo", 99)
         self.assertIn("Pull request #99 not found", str(ctx.exception))
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_get_authenticated_user_info_success(self, mock_requests_get):
         """Test get_authenticated_user_info with successful response."""
         # Mock the response
@@ -654,7 +654,7 @@ class TestGithubApiHelpers(unittest.TestCase):
         self.assertEqual(name, "Test User")
         self.assertEqual(html_url, "https://github.com/testuser")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_get_authenticated_user_info_success_no_name(self, mock_requests_get):
         """Test get_authenticated_user_info with successful response but no name field."""
         # Mock the response with no name field
@@ -676,7 +676,7 @@ class TestGithubApiHelpers(unittest.TestCase):
         self.assertEqual(name, "testuser")
         self.assertEqual(html_url, "https://github.com/testuser")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_get_authenticated_user_info_failure(self, mock_requests_get):
         """Test get_authenticated_user_info with failed response."""
         # Mock a failed response
@@ -837,7 +837,7 @@ class TestHelperFunctions(unittest.TestCase):
         result = validate_sort_column("APPROVALS")
         self.assertEqual(result, "approvals")
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_pr_diff(self, mock_get):
         """Test fetch_pr_diff function with error response."""
         from gh_pulls_summary.main import GitHubAPIError
@@ -1098,7 +1098,7 @@ class TestHelperFunctions(unittest.TestCase):
 class TestFetchFileContent(unittest.TestCase):
     """Test cases for fetch_file_content function."""
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_file_content_success(self, mock_get):
         """Test successful file content fetch."""
         mock_response = Mock()
@@ -1111,7 +1111,7 @@ class TestFetchFileContent(unittest.TestCase):
         self.assertEqual(result, "File content here")
         mock_get.assert_called_once()
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_file_content_404(self, mock_get):
         """Test file not found (404)."""
         mock_response = Mock()
@@ -1122,7 +1122,7 @@ class TestFetchFileContent(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_file_content_403(self, mock_get):
         """Test access denied or rate limit (403)."""
         mock_response = Mock()
@@ -1133,7 +1133,7 @@ class TestFetchFileContent(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_file_content_other_error(self, mock_get):
         """Test other HTTP errors."""
         mock_response = Mock()
@@ -1144,7 +1144,7 @@ class TestFetchFileContent(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_file_content_exception(self, mock_get):
         """Test exception handling."""
         mock_get.side_effect = Exception("Network error")
@@ -1153,7 +1153,7 @@ class TestFetchFileContent(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("gh_pulls_summary.main.requests.get")
+    @patch("gh_pulls_summary.github_api.requests.get")
     def test_fetch_file_content_special_characters(self, mock_get):
         """Test URL encoding for filenames with special characters like ?."""
         mock_response = Mock()

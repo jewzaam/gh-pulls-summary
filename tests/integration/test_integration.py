@@ -416,6 +416,7 @@ class TestRealWorldScenarios(IntegrationTestBase):
                 jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
                 jira_metadata_row_search_depth = 50
                 jira_url = None
+                jira_user = None
                 jira_token = None
                 jira_rank_field = None
                 review_requested_for = None
