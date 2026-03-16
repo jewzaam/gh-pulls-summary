@@ -34,6 +34,7 @@ class JiraClient:
     def __init__(
         self,
         base_url: str | None = None,
+        user: str | None = None,
         token: str | None = None,
         rank_field_id: str | None = None,
     ):
@@ -42,6 +43,7 @@ class JiraClient:
 
         Args:
             base_url: JIRA instance URL (can also be set via JIRA_BASE_URL env var)
+            user: Email for Atlassian Cloud authentication (can also be set via JIRA_USER env var)
             token: API token for authentication (can also be set via JIRA_TOKEN env var)
             rank_field_id: Explicit Rank field ID (e.g., 'customfield_12311940'). If not provided, will attempt discovery.
 
@@ -50,11 +52,17 @@ class JiraClient:
         """
         base_url_value = base_url or os.getenv("JIRA_BASE_URL") or ""
         self.base_url = base_url_value.rstrip("/")
+        self.user = user or os.getenv("JIRA_USER")
         self.token = token or os.getenv("JIRA_TOKEN")
 
         if not self.base_url:
             raise ValueError(
                 "JIRA base URL is required. Set via --jira-url or JIRA_BASE_URL environment variable."
+            )
+
+        if not self.user:
+            raise ValueError(
+                "JIRA user is required. Set via --jira-user or JIRA_USER environment variable."
             )
 
         if not self.token:
@@ -65,8 +73,8 @@ class JiraClient:
         self.api_base = urljoin(self.base_url, "/rest/api/2/")
         self.session = requests.Session()
 
-        # Set up Bearer token authentication
-        self.session.headers.update({"Authorization": f"Bearer {self.token}"})
+        # Set up Basic authentication for Atlassian Cloud (email:api_token)
+        self.session.auth = (self.user, self.token)
 
         # Set common headers
         self.session.headers.update(

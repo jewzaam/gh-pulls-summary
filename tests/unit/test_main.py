@@ -57,6 +57,7 @@ class TestMainFunction(unittest.TestCase):
             jira_metadata_row_search_depth = 50
             github_token = None
             jira_url = None
+            jira_user = None
             jira_token = None
             jira_rank_field = None
             review_requested_for = None
@@ -125,6 +126,7 @@ class TestMainFunction(unittest.TestCase):
             jira_metadata_row_search_depth = 50
             github_token = None
             jira_url = None
+            jira_user = None
             jira_token = None
             jira_rank_field = None
             review_requested_for = None
@@ -179,6 +181,7 @@ class TestMainFunction(unittest.TestCase):
             jira_metadata_row_search_depth = 50
             github_token = None
             jira_url = None
+            jira_user = None
             jira_token = None
             jira_rank_field = None
             review_requested_for = None
@@ -246,6 +249,7 @@ class TestMainFunction(unittest.TestCase):
             jira_metadata_row_search_depth = 50
             github_token = None
             jira_url = None
+            jira_user = None
             jira_token = None
             jira_rank_field = None
             review_requested_for = None

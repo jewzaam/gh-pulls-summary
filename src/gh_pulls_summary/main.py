@@ -182,12 +182,17 @@ def parse_arguments():
     parser.add_argument(
         "--jira-url",
         type=str,
-        help="JIRA instance base URL (e.g., 'https://issues.redhat.com'). Can also be set via JIRA_BASE_URL environment variable.",
+        help="JIRA instance base URL (e.g., 'https://yourorg.atlassian.net'). Can also be set via JIRA_BASE_URL environment variable.",
+    )
+    parser.add_argument(
+        "--jira-user",
+        type=str,
+        help="JIRA user email for Atlassian Cloud authentication. Can also be set via JIRA_USER environment variable.",
     )
     parser.add_argument(
         "--jira-token",
         type=str,
-        help="JIRA API token for authentication. Can also be set via JIRA_TOKEN environment variable.",
+        help="JIRA API token for Atlassian Cloud authentication. Can also be set via JIRA_TOKEN environment variable.",
     )
     parser.add_argument(
         "--jira-rank-field",
@@ -616,6 +621,7 @@ def create_jira_client(args) -> JiraClient | None:
     try:
         client = JiraClient(
             base_url=args.jira_url,
+            user=args.jira_user,
             token=args.jira_token,
             rank_field_id=args.jira_rank_field,
         )
