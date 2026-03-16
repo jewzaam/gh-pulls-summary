@@ -219,7 +219,7 @@ class JiraClient:
         Uses issue cache to avoid redundant API calls.
 
         Args:
-            issue_key: JIRA issue key (e.g., 'ANSTRAT-1660')
+            issue_key: JIRA issue key (e.g., 'PROJECT-100')
 
         Returns:
             Issue data including fields, type, and rank

@@ -51,7 +51,7 @@ class TestMainFunction(unittest.TestCase):
             column_title = None
             sort_column = "date"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50
@@ -120,7 +120,7 @@ class TestMainFunction(unittest.TestCase):
             column_title = ["date=Ready Date", "approvals=Total Approvals"]
             sort_column = "date"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50
@@ -175,7 +175,7 @@ class TestMainFunction(unittest.TestCase):
             column_title = None
             sort_column = "approvals"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50
@@ -243,7 +243,7 @@ class TestMainFunction(unittest.TestCase):
             column_title = None
             sort_column = "date"
             include_rank = False
-            jira_issue_pattern = r"(ANSTRAT-\d+)"
+            jira_issue_pattern = r"(PROJ-\d+)"
             jira_include = None
             jira_metadata_row_pattern = r"feature\s*/?\s*initiative"
             jira_metadata_row_search_depth = 50
@@ -1179,18 +1179,18 @@ class TestExtractJiraFunctions(unittest.TestCase):
 
     def test_extract_jira_issue_keys_invalid_regex(self):
         """Test handling of invalid regex pattern."""
-        url_dict = {"http://example.com": "text with ANSTRAT-1234"}
+        url_dict = {"http://example.com": "text with PROJ-1234"}
 
-        result = extract_jira_issue_keys(url_dict, r"(ANSTRAT-\d+[")  # Invalid regex
+        result = extract_jira_issue_keys(url_dict, r"(PROJ-\d+[")  # Invalid regex
 
         self.assertEqual(result, [])
 
     def test_extract_jira_from_file_contents_invalid_regex(self):
         """Test handling of invalid regex pattern in file contents."""
-        file_contents = ["Content with ANSTRAT-1234"]
+        file_contents = ["Content with PROJ-1234"]
 
         result = extract_jira_from_file_contents(
-            file_contents, [r"(ANSTRAT-\d+["]
+            file_contents, [r"(PROJ-\d+["]
         )  # Invalid regex
 
         self.assertEqual(result, [])
@@ -1205,15 +1205,15 @@ class TestGetRankForPR(unittest.TestCase):
         mock_jira_client.get_issue_type = Mock(return_value="Feature")
         mock_jira_client.extract_rank_value = Mock()
 
-        # Setup: ANSTRAT-1 is open with rank "0_i02v00", ANSTRAT-2 is closed with rank "0_i01v00"
-        # Even though ANSTRAT-2 has a "better" (lower) rank, ANSTRAT-1 should be preferred
+        # Setup: PROJ-1 is open with rank "0_i02v00", PROJ-2 is closed with rank "0_i01v00"
+        # Even though PROJ-2 has a "better" (lower) rank, PROJ-1 should be preferred
         def get_status(issue_data):
-            if issue_data["key"] == "ANSTRAT-1":
+            if issue_data["key"] == "PROJ-1":
                 return "In Progress"
             return "Closed"
 
         def get_rank(issue_data):
-            if issue_data["key"] == "ANSTRAT-1":
+            if issue_data["key"] == "PROJ-1":
                 return "0_i02v00"
             return "0_i01v00"
 
@@ -1221,18 +1221,18 @@ class TestGetRankForPR(unittest.TestCase):
         mock_jira_client.extract_rank_value = Mock(side_effect=get_rank)
 
         metadata_cache = {
-            "ANSTRAT-1": {"key": "ANSTRAT-1"},
-            "ANSTRAT-2": {"key": "ANSTRAT-2"},
+            "PROJ-1": {"key": "PROJ-1"},
+            "PROJ-2": {"key": "PROJ-2"},
         }
 
         rank, closed_keys = get_rank_for_pr(
-            mock_jira_client, ["ANSTRAT-1", "ANSTRAT-2"], metadata_cache
+            mock_jira_client, ["PROJ-1", "PROJ-2"], metadata_cache
         )
 
-        # Should prefer the open issue ANSTRAT-1
-        self.assertEqual(rank, "0_i02v00 ANSTRAT-1")
-        # Should track ANSTRAT-2 as closed
-        self.assertEqual(closed_keys, {"ANSTRAT-2"})
+        # Should prefer the open issue PROJ-1
+        self.assertEqual(rank, "0_i02v00 PROJ-1")
+        # Should track PROJ-2 as closed
+        self.assertEqual(closed_keys, {"PROJ-2"})
 
     def test_get_rank_for_pr_fallback_to_closed(self):
         """Test that closed issues are used when no open issues have ranks."""
@@ -1242,17 +1242,17 @@ class TestGetRankForPR(unittest.TestCase):
         mock_jira_client.extract_rank_value = Mock(return_value="0_i02v00")
 
         metadata_cache = {
-            "ANSTRAT-1660": {"key": "ANSTRAT-1660"},
+            "PROJ-1660": {"key": "PROJ-1660"},
         }
 
         rank, closed_keys = get_rank_for_pr(
-            mock_jira_client, ["ANSTRAT-1660"], metadata_cache
+            mock_jira_client, ["PROJ-1660"], metadata_cache
         )
 
         # Should still return rank even though issue is closed
-        self.assertEqual(rank, "0_i02v00 ANSTRAT-1660")
+        self.assertEqual(rank, "0_i02v00 PROJ-1660")
         # Should track as closed
-        self.assertEqual(closed_keys, {"ANSTRAT-1660"})
+        self.assertEqual(closed_keys, {"PROJ-1660"})
 
     def test_get_rank_for_pr_no_closed_issues(self):
         """Test that closed_keys is empty when all issues are open."""
@@ -1262,14 +1262,14 @@ class TestGetRankForPR(unittest.TestCase):
         mock_jira_client.extract_rank_value = Mock(return_value="0_i02v00")
 
         metadata_cache = {
-            "ANSTRAT-1": {"key": "ANSTRAT-1"},
+            "PROJ-1": {"key": "PROJ-1"},
         }
 
         rank, closed_keys = get_rank_for_pr(
-            mock_jira_client, ["ANSTRAT-1"], metadata_cache
+            mock_jira_client, ["PROJ-1"], metadata_cache
         )
 
-        self.assertEqual(rank, "0_i02v00 ANSTRAT-1")
+        self.assertEqual(rank, "0_i02v00 PROJ-1")
         # Should have no closed issues
         self.assertEqual(closed_keys, set())
 
@@ -1290,20 +1290,20 @@ class TestMarkdownTableRowWithClosedIssues(unittest.TestCase):
             "approvals": 1,
             "changes": 1,
             "pr_body_urls_dict": {
-                "ANSTRAT-1660": "https://issues.redhat.com/browse/ANSTRAT-1660",
-                "ANSTRAT-1661": "https://issues.redhat.com/browse/ANSTRAT-1661",
+                "PROJ-1660": "https://jira.example.com/browse/PROJ-1660",
+                "PROJ-1661": "https://jira.example.com/browse/PROJ-1661",
             },
-            "rank": "0_i02v00 ANSTRAT-1660",
-            "closed_issue_keys": {"ANSTRAT-1660"},  # Only ANSTRAT-1660 is closed
+            "rank": "0_i02v00 PROJ-1660",
+            "closed_issue_keys": {"PROJ-1660"},  # Only PROJ-1660 is closed
         }
 
         row = create_markdown_table_row(pr, url_column=True, rank_column=True)
 
-        # ANSTRAT-1660 should have strikethrough
-        self.assertIn("[~~ANSTRAT-1660~~]", row)
-        # ANSTRAT-1661 should not have strikethrough
-        self.assertIn("[ANSTRAT-1661]", row)
-        self.assertNotIn("~~ANSTRAT-1661~~", row)
+        # PROJ-1660 should have strikethrough
+        self.assertIn("[~~PROJ-1660~~]", row)
+        # PROJ-1661 should not have strikethrough
+        self.assertIn("[PROJ-1661]", row)
+        self.assertNotIn("~~PROJ-1661~~", row)
 
     def test_create_markdown_table_row_with_all_open_issues(self):
         """Test that open JIRA issues are rendered without strikethrough."""
@@ -1318,17 +1318,17 @@ class TestMarkdownTableRowWithClosedIssues(unittest.TestCase):
             "approvals": 1,
             "changes": 1,
             "pr_body_urls_dict": {
-                "ANSTRAT-1660": "https://issues.redhat.com/browse/ANSTRAT-1660"
+                "PROJ-1660": "https://jira.example.com/browse/PROJ-1660"
             },
-            "rank": "0_i02v00 ANSTRAT-1660",
+            "rank": "0_i02v00 PROJ-1660",
             "closed_issue_keys": set(),  # No closed issues
         }
 
         row = create_markdown_table_row(pr, url_column=True, rank_column=True)
 
-        # ANSTRAT-1660 should not have strikethrough
-        self.assertIn("[ANSTRAT-1660]", row)
-        self.assertNotIn("~~ANSTRAT-1660~~", row)
+        # PROJ-1660 should not have strikethrough
+        self.assertIn("[PROJ-1660]", row)
+        self.assertNotIn("~~PROJ-1660~~", row)
 
 
 if __name__ == "__main__":

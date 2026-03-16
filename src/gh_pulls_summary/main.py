@@ -202,13 +202,13 @@ def parse_arguments():
     parser.add_argument(
         "--include-rank",
         action="store_true",
-        help="Include JIRA rank column in output. Requires JIRA configuration (--jira-url or JIRA_BASE_URL). Only includes ANSTRAT issues of type Feature and Initiative.",
+        help="Include JIRA rank column in output. Requires JIRA configuration (--jira-url or JIRA_BASE_URL). Only includes issues of type Feature and Initiative.",
     )
     parser.add_argument(
         "--jira-issue-pattern",
         type=str,
         action="append",
-        help="Regex pattern to extract JIRA issue keys from file contents. Use parentheses to capture the issue key (e.g., '(ANSTRAT-\\d+)'). Can be specified multiple times to use multiple patterns. If not specified, defaults to '(ANSTRAT-\\d+)'.",
+        help="Regex pattern to extract JIRA issue keys from file contents. Use parentheses to capture the issue key (e.g., '(PROJECT-\\d+)'). Can be specified multiple times to use multiple patterns.",
     )
     parser.add_argument(
         "--jira-include",
@@ -220,7 +220,7 @@ def parse_arguments():
         "--jira-metadata-row-pattern",
         type=str,
         default=r"feature\s*/?\s*initiative",
-        help="Regex pattern to identify the metadata table row containing primary JIRA issue (case-insensitive). Default is 'feature\\s*/?\\s*initiative' to match rows like '| **Feature / Initiative** | [ANSTRAT-1234](...) |'.",
+        help="Regex pattern to identify the metadata table row containing primary JIRA issue (case-insensitive). Default is 'feature\\s*/?\\s*initiative' to match rows like '| **Feature / Initiative** | [PROJECT-1234](...) |'.",
     )
     parser.add_argument(
         "--jira-metadata-row-search-depth",
@@ -678,11 +678,11 @@ def extract_primary_jira_from_metadata(
     Extract primary JIRA issues from metadata table.
 
     Looks for a markdown table with a row matching the specified pattern, e.g.:
-    | **Feature / Initiative** | [ANSTRAT-1586](url) |
+    | **Feature / Initiative** | [PROJECT-1586](url) |
 
     Args:
         content: Text content to search (PR body or file content)
-        patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)"])
+        patterns: List of regex patterns to extract issue keys (e.g., [r"(PROJECT-\\d+)"])
         row_pattern: Regex pattern to identify the metadata row (case-insensitive)
         search_depth: Number of lines to search from the top (-1 for unlimited)
 
@@ -746,7 +746,7 @@ def extract_primary_jira_from_file_contents(
 
     Args:
         file_contents: List of file content strings to search
-        patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)"])
+        patterns: List of regex patterns to extract issue keys (e.g., [r"(PROJECT-\\d+)"])
         row_pattern: Regex pattern to identify the metadata row (case-insensitive)
         search_depth: Number of lines to search from the top of each file (-1 for unlimited)
 
@@ -785,7 +785,7 @@ def extract_jira_from_file_contents(
 
     Args:
         file_contents: List of file content strings to search (full file contents)
-        patterns: List of regex patterns to extract issue keys (e.g., [r"(ANSTRAT-\\d+)", r"(OTHERJIRA-\\d+)"])
+        patterns: List of regex patterns to extract issue keys (e.g., [r"(PROJECT-\\d+)", r"(OTHERJIRA-\\d+)"])
 
     Returns:
         Sorted list of unique JIRA issue keys found across all patterns
@@ -1581,8 +1581,7 @@ def generate_markdown_output(args):
     # Handle JIRA issue patterns - ensure it's always a list
     jira_issue_patterns = args.jira_issue_pattern
     if not jira_issue_patterns:
-        # No patterns specified, use default
-        jira_issue_patterns = [r"(ANSTRAT-\d+)"]
+        jira_issue_patterns = []
     elif isinstance(jira_issue_patterns, str):
         # Single pattern as string (e.g., from tests), convert to list
         jira_issue_patterns = [jira_issue_patterns]
