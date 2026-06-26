@@ -703,6 +703,7 @@ Some other content with [PROJ-1234](https://jira.example.com/browse/PROJ-1234) r
 class TestFileContentFetchingWithJira(unittest.TestCase):
     """Test cases for file content fetching when JIRA integration is enabled."""
 
+    @patch("gh_pulls_summary.main.LocalCheckout")
     @patch("gh_pulls_summary.main.fetch_file_content")
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_reviews")
@@ -717,12 +718,18 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
         mock_fetch_reviews,
         mock_fetch_pr_files,
         mock_fetch_file_content,
+        mock_checkout_cls,
     ):
         """Test that file contents are fetched when JIRA client is configured."""
         import re
 
         from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.local_checkout import LocalCheckoutError
         from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        mock_checkout_cls.return_value.ensure_clone.side_effect = LocalCheckoutError(
+            "test"
+        )
 
         # Mock pull requests
         mock_fetch_pull_requests.return_value = [
@@ -795,6 +802,7 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
         self.assertIsNotNone(pull_requests[0].rank)
         self.assertIn("PROJ-1234", pull_requests[0].rank)
 
+    @patch("gh_pulls_summary.main.LocalCheckout")
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_reviews")
     @patch("gh_pulls_summary.main.fetch_user_details")
@@ -807,12 +815,18 @@ class TestFileContentFetchingWithJira(unittest.TestCase):
         mock_fetch_user_details,
         mock_fetch_reviews,
         mock_fetch_pr_files,
+        mock_checkout_cls,
     ):
         """Test that file content fetching is skipped if no PR ref."""
         import re
 
         from gh_pulls_summary.jira_client import JiraClient
+        from gh_pulls_summary.local_checkout import LocalCheckoutError
         from gh_pulls_summary.main import fetch_and_process_pull_requests
+
+        mock_checkout_cls.return_value.ensure_clone.side_effect = LocalCheckoutError(
+            "test"
+        )
 
         # Mock pull requests without head SHA
         mock_fetch_pull_requests.return_value = [
