@@ -42,6 +42,7 @@ from gh_pulls_summary.jira_processing import (  # noqa: F401
     extract_primary_jira_from_metadata,
     get_rank_for_pr,
 )
+from gh_pulls_summary.local_checkout import LocalCheckout, LocalCheckoutError
 from gh_pulls_summary.output import (
     create_markdown_table_header,
     create_markdown_table_row,
@@ -295,6 +296,19 @@ def fetch_and_process_pull_requests(
                 f"Please provide a valid regular expression pattern."
             )
 
+    # Initialize local checkout for file operations (replaces per-file API calls)
+    checkout = None
+    needs_file_ops = file_include or file_exclude or url_from_pr_content
+    if needs_file_ops:
+        try:
+            checkout = LocalCheckout(owner, repo, github_token)
+            checkout.ensure_clone()
+        except LocalCheckoutError as e:
+            logging.warning(
+                f"Failed to set up local checkout: {e}. Falling back to API calls."
+            )
+            checkout = None
+
     # Preprocessing: Collect all JIRA issue keys and batch fetch metadata
     jira_metadata_cache: dict[str, dict[str, Any]] = {}
     pr_issue_keys_map: dict[int, list[str]] = {}
@@ -320,24 +334,40 @@ def fetch_and_process_pull_requests(
 
             # Fetch file contents if needed (same logic as main loop)
             if file_include:
-                pr_ref = pr.get("head", {}).get("sha")
-                if pr_ref:
-                    files = fetch_pr_files(owner, repo, pr_number, github_token)
-                    if files:
-                        matching_files = []
-                        for file in files:
-                            file_path = file.get("filename", "")
-                            if any(
-                                pattern.search(file_path) for pattern in file_include
-                            ):
-                                matching_files.append(file_path)
-
+                base_sha = pr.get("base", {}).get("sha")
+                if checkout and base_sha:
+                    file_paths = checkout.get_changed_files(
+                        base_sha, pr_number, exclude_deleted=True
+                    )
+                    if file_paths:
+                        matching_files = [
+                            fp
+                            for fp in file_paths
+                            if any(pattern.search(fp) for pattern in file_include)
+                        ]
                         for file_path in matching_files:
-                            content = fetch_file_content(
-                                owner, repo, file_path, pr_ref, github_token
-                            )
+                            content = checkout.get_file_content(pr_number, file_path)
                             if content:
                                 file_contents_list.append(content)
+                else:
+                    pr_ref = pr.get("head", {}).get("sha")
+                    if pr_ref:
+                        files = fetch_pr_files(owner, repo, pr_number, github_token)
+                        if files:
+                            matching_files = [
+                                file.get("filename", "")
+                                for file in files
+                                if any(
+                                    pattern.search(file.get("filename", ""))
+                                    for pattern in file_include
+                                )
+                            ]
+                            for file_path in matching_files:
+                                content = fetch_file_content(
+                                    owner, repo, file_path, pr_ref, github_token
+                                )
+                                if content:
+                                    file_contents_list.append(content)
 
             # Extract issue keys for this PR
             issue_keys = extract_issue_keys_from_pr(
@@ -385,14 +415,22 @@ def fetch_and_process_pull_requests(
 
         # Apply file filters if specified
         if file_include or file_exclude:
-            # Fetch files changed in the PR
-            files = fetch_pr_files(owner, repo, pr_number, github_token)
-            if files is None:
-                logging.warning(
-                    f"Failed to fetch files for PR #{pr_number}. File filters will be ignored for this PR. This may be due to network issues or API rate limits."
-                )
-                files = []
-            file_paths = [file["filename"] for file in files]
+            base_sha = pr.get("base", {}).get("sha")
+            if checkout and base_sha:
+                file_paths = checkout.get_changed_files(base_sha, pr_number)
+                if file_paths is None:
+                    logging.warning(
+                        f"Failed to get changed files for PR #{pr_number}. File filters will be ignored for this PR."
+                    )
+                    file_paths = []
+            else:
+                files = fetch_pr_files(owner, repo, pr_number, github_token)
+                if files is None:
+                    logging.warning(
+                        f"Failed to fetch files for PR #{pr_number}. File filters will be ignored for this PR. This may be due to network issues or API rate limits."
+                    )
+                    files = []
+                file_paths = [file["filename"] for file in files]
 
             # Check file-exclude filters first
             if file_exclude and any(
@@ -499,7 +537,11 @@ def fetch_and_process_pull_requests(
         # Optionally extract all unique URLs from the PR diff (added lines only), sorted by display text
         pr_body_urls_dict = {}
         if url_regex_compiled:
-            diff = fetch_pr_diff(owner, repo, pr_number, github_token)
+            base_sha = pr.get("base", {}).get("sha")
+            if checkout and base_sha:
+                diff = checkout.get_diff(base_sha, pr_number)
+            else:
+                diff = fetch_pr_diff(owner, repo, pr_number, github_token)
             if diff is not None:
                 for line in diff.splitlines():
                     if line.startswith("+") and not line.startswith("+++"):

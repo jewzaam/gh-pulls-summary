@@ -2,10 +2,12 @@ import re
 import unittest
 from unittest.mock import patch
 
+from gh_pulls_summary.local_checkout import LocalCheckoutError
 from gh_pulls_summary.main import fetch_and_process_pull_requests
 
 
 class TestFetchAndProcessPullRequests(unittest.TestCase):
+    @patch("gh_pulls_summary.main.LocalCheckout")
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_issue_events")
@@ -18,8 +20,12 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
         mock_fetch_issue_events,
         mock_fetch_pr_files,
         mock_fetch_pull_requests,
+        mock_checkout_cls,
     ):
-        # Mock pull requests
+        mock_checkout_cls.return_value.ensure_clone.side_effect = LocalCheckoutError(
+            "test"
+        )
+
         mock_fetch_pull_requests.return_value = [
             {
                 "number": 1,
@@ -39,13 +45,11 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
             },
         ]
 
-        # Mock files changed in PRs
         mock_fetch_pr_files.side_effect = [
-            [{"filename": "src/file1.py"}],  # PR 1
-            [{"filename": "docs/readme.md"}],  # PR 2
+            [{"filename": "src/file1.py"}],
+            [{"filename": "docs/readme.md"}],
         ]
 
-        # Mock other dependencies
         mock_fetch_issue_events.return_value = []
         mock_fetch_reviews.return_value = []
         mock_fetch_user_details.return_value = {
@@ -53,16 +57,15 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
             "html_url": "user_url",
         }
 
-        # Call the function with file-include filters
         file_include = [re.compile(r".*\.py$")]
         pull_requests, _ = fetch_and_process_pull_requests(
             "owner", "repo", file_include=file_include
         )
 
-        # Verify results
         self.assertEqual(len(pull_requests), 1)
         self.assertEqual(pull_requests[0].number, 1)
 
+    @patch("gh_pulls_summary.main.LocalCheckout")
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_issue_events")
@@ -75,8 +78,12 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
         mock_fetch_issue_events,
         mock_fetch_pr_files,
         mock_fetch_pull_requests,
+        mock_checkout_cls,
     ):
-        # Mock pull requests
+        mock_checkout_cls.return_value.ensure_clone.side_effect = LocalCheckoutError(
+            "test"
+        )
+
         mock_fetch_pull_requests.return_value = [
             {
                 "number": 1,
@@ -96,13 +103,11 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
             },
         ]
 
-        # Mock files changed in PRs
         mock_fetch_pr_files.side_effect = [
-            [{"filename": "src/file1.py"}],  # PR 1
-            [{"filename": "docs/readme.md"}],  # PR 2
+            [{"filename": "src/file1.py"}],
+            [{"filename": "docs/readme.md"}],
         ]
 
-        # Mock other dependencies
         mock_fetch_issue_events.return_value = []
         mock_fetch_reviews.return_value = []
         mock_fetch_user_details.return_value = {
@@ -110,16 +115,15 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
             "html_url": "user_url",
         }
 
-        # Call the function with file-exclude filters
         file_exclude = [re.compile(r"docs/.*")]
         pull_requests, _ = fetch_and_process_pull_requests(
             "owner", "repo", file_exclude=file_exclude
         )
 
-        # Verify results
         self.assertEqual(len(pull_requests), 1)
         self.assertEqual(pull_requests[0].number, 1)
 
+    @patch("gh_pulls_summary.main.LocalCheckout")
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_pr_files")
     @patch("gh_pulls_summary.main.fetch_issue_events")
@@ -132,8 +136,12 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
         mock_fetch_issue_events,
         mock_fetch_pr_files,
         mock_fetch_pull_requests,
+        mock_checkout_cls,
     ):
-        # Mock pull requests
+        mock_checkout_cls.return_value.ensure_clone.side_effect = LocalCheckoutError(
+            "test"
+        )
+
         mock_fetch_pull_requests.return_value = [
             {
                 "number": 1,
@@ -161,14 +169,12 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
             },
         ]
 
-        # Mock files changed in PRs
         mock_fetch_pr_files.side_effect = [
-            [{"filename": "src/file1.py"}],  # PR 1
-            [{"filename": "docs/readme.md"}],  # PR 2
-            [{"filename": "src/file2.py"}, {"filename": "docs/readme.md"}],  # PR 3
+            [{"filename": "src/file1.py"}],
+            [{"filename": "docs/readme.md"}],
+            [{"filename": "src/file2.py"}, {"filename": "docs/readme.md"}],
         ]
 
-        # Mock other dependencies
         mock_fetch_issue_events.return_value = []
         mock_fetch_reviews.return_value = []
         mock_fetch_user_details.return_value = {
@@ -176,14 +182,12 @@ class TestFetchAndProcessPullRequests(unittest.TestCase):
             "html_url": "user_url",
         }
 
-        # Call the function with both file-include and file-exclude filters
         file_include = [re.compile(r".*\.py$")]
         file_exclude = [re.compile(r"docs/.*")]
         pull_requests, _ = fetch_and_process_pull_requests(
             "owner", "repo", file_include=file_include, file_exclude=file_exclude
         )
 
-        # Verify results
         self.assertEqual(len(pull_requests), 1)
         self.assertEqual(
             pull_requests[0].number, 1

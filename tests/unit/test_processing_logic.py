@@ -141,6 +141,7 @@ class TestProcessingLogic(unittest.TestCase):
         ]
         self.assertEqual(result, expected_result)
 
+    @patch("gh_pulls_summary.main.LocalCheckout")
     @patch("gh_pulls_summary.main.fetch_pr_diff")
     @patch("gh_pulls_summary.main.fetch_pull_requests")
     @patch("gh_pulls_summary.main.fetch_issue_events")
@@ -153,7 +154,14 @@ class TestProcessingLogic(unittest.TestCase):
         mock_fetch_issue_events,
         mock_fetch_pull_requests,
         mock_fetch_pr_diff,
+        mock_checkout_cls,
     ):
+        from gh_pulls_summary.local_checkout import LocalCheckoutError
+
+        mock_checkout_cls.return_value.ensure_clone.side_effect = LocalCheckoutError(
+            "test"
+        )
+
         # Mock a PR
         mock_fetch_pull_requests.return_value = [
             {
