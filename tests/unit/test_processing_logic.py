@@ -222,7 +222,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
         # Mock arguments
         args = MagicMock(
             owner="owner",
-            repo="repo",
+            repo=["repo"],
             draft_filter=None,
             file_include=None,
             file_exclude=None,
@@ -289,7 +289,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
     def test_generate_markdown_output_with_custom_titles(self, mock_fetch):
         class Args:
             owner = "owner"
-            repo = "repo"
+            repo = ["repo"]
             draft_filter = None
             debug = False
             pr_number = None
@@ -342,7 +342,7 @@ class TestGenerateMarkdownOutput(unittest.TestCase):
     def test_generate_markdown_output_sort_by_title(self, mock_fetch):
         class Args:
             owner = "owner"
-            repo = "repo"
+            repo = ["repo"]
             draft_filter = None
             debug = False
             pr_number = None

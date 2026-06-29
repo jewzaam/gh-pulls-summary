@@ -73,6 +73,7 @@ class PullRequestData:
     rank: str = ""
     closed_issue_keys: set[str] = field(default_factory=set)
     jira_key: str | None = None
+    repo_name: str = ""
 
 
 @dataclass
