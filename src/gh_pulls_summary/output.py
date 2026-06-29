@@ -102,7 +102,8 @@ def create_markdown_table_row(pr, url_column, rank_column, jira_issues=None):
         changes_text = ""
     else:
         # Regular PR entry
-        title_link = f"{pr.title} #[{pr.number}]({pr.url})"
+        prefix = f"{pr.repo_name}: " if pr.repo_name else ""
+        title_link = f"{prefix}{pr.title} #[{pr.number}]({pr.url})"
 
         author_link = f"[{pr.author_name}]({pr.author_url})" if pr.author_name else ""
         approvals_text = f"{pr.approvals} of {pr.reviews}" if pr.reviews > 0 else ""

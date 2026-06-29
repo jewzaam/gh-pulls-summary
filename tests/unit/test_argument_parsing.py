@@ -27,7 +27,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_with_all_options(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertEqual(args.draft_filter, "no-drafts")
         self.assertTrue(args.debug)
 
@@ -35,7 +35,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_with_required_options_only(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertIsNone(args.draft_filter)
         self.assertFalse(args.debug)
 
@@ -47,7 +47,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_with_git_metadata(self, mock_get_repo_and_owner_from_git):
         args = parse_arguments()
         self.assertEqual(args.owner, "mock_owner")
-        self.assertEqual(args.repo, "mock_repo")
+        self.assertIsNone(args.repo)
 
     @patch(
         "gh_pulls_summary.main.get_repo_and_owner_from_git", return_value=(None, None)
@@ -80,7 +80,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_with_url_from_pr_content(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertEqual(args.url_from_pr_content, "http://example.com")
 
     @patch(
@@ -100,7 +100,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_with_jira_include(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertEqual(args.jira_include, ["PROJ-1234", "PROJ-5678"])
 
     @patch(
@@ -116,7 +116,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_without_jira_include(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertIsNone(args.jira_include)
 
     @patch(
@@ -134,7 +134,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_with_review_requested_for(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertEqual(args.review_requested_for, "testuser")
 
     @patch(
@@ -150,7 +150,7 @@ class TestArgumentParsing(unittest.TestCase):
     def test_parse_arguments_without_review_requested_for(self):
         args = parse_arguments()
         self.assertEqual(args.owner, "owner")
-        self.assertEqual(args.repo, "repo")
+        self.assertEqual(args.repo, ["repo"])
         self.assertIsNone(args.review_requested_for)
 
 

@@ -42,7 +42,7 @@ class TestMainFunction(unittest.TestCase):
 
         class Args:
             owner = "owner"
-            repo = "repo"
+            repo = ["repo"]
             draft_filter = None
             debug = False
             pr_number = None
@@ -111,7 +111,7 @@ class TestMainFunction(unittest.TestCase):
 
         class Args:
             owner = "owner"
-            repo = "repo"
+            repo = ["repo"]
             draft_filter = None
             debug = False
             pr_number = None
@@ -166,7 +166,7 @@ class TestMainFunction(unittest.TestCase):
 
         class Args:
             owner = "owner"
-            repo = "repo"
+            repo = ["repo"]
             draft_filter = None
             debug = False
             pr_number = None
@@ -234,7 +234,7 @@ class TestMainFunction(unittest.TestCase):
 
         class Args:
             owner = "owner"
-            repo = "repo"
+            repo = ["repo"]
             draft_filter = None
             debug = False
             pr_number = None
@@ -387,7 +387,7 @@ class TestMainFunction(unittest.TestCase):
 
         # Verify that error message was printed to stderr
         mock_print.assert_any_call(
-            "ERROR: Repository owner and name must be specified.", file=sys.stderr
+            "ERROR: Repository must be specified.", file=sys.stderr
         )
 
     @patch("gh_pulls_summary.main.generate_markdown_output")
@@ -854,24 +854,19 @@ class TestHelperFunctions(unittest.TestCase):
 
         self.assertIn("Pull request #99 not found", str(ctx.exception))
 
+    @patch(
+        "gh_pulls_summary.main.get_repo_and_owner_from_git",
+        return_value=(None, None),
+    )
     @patch("gh_pulls_summary.main.sys.exit")
-    def test_main_failure_without_owner_and_repo(self, mock_exit):
+    def test_main_failure_without_owner_and_repo(self, mock_exit, mock_git):
         """Test main function exits when owner and repo are not provided."""
-        # Make sys.exit actually raise SystemExit to stop execution
         mock_exit.side_effect = SystemExit(1)
 
         with patch("gh_pulls_summary.main.parse_arguments") as mock_parse:
             mock_args = Mock()
             mock_args.owner = None
             mock_args.repo = None
-            # Add the required attributes that the main function checks
-            mock_args.file_include = None
-            mock_args.file_exclude = None
-            mock_args.pr_number = None
-            mock_args.url_from_pr_content = None
-            mock_args.draft_filter = None
-            mock_args.sort_column = "date"
-            mock_args.column_title = None
             mock_args.debug = False
             mock_args.output_markdown = None
             mock_parse.return_value = mock_args
@@ -879,7 +874,6 @@ class TestHelperFunctions(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx:
                 main()
 
-            # Verify that sys.exit was called with code 1
             self.assertEqual(ctx.exception.code, 1)
             mock_exit.assert_called_with(1)
 

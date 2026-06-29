@@ -95,8 +95,8 @@ def parse_arguments():
     """
     Parses command-line arguments for the script.
     """
-    # Get default owner and repo from Git metadata
-    default_owner, default_repo = get_repo_and_owner_from_git()
+    # Get default owner from Git metadata
+    default_owner, _ = get_repo_and_owner_from_git()
 
     parser = argparse.ArgumentParser(
         description="Fetch and summarize GitHub pull requests."
@@ -104,12 +104,12 @@ def parse_arguments():
     parser.add_argument(
         "--owner",
         default=default_owner,
-        help="The owner of the repository (e.g., 'microsoft'). If not specified, defaults to the owner from the current directory's Git config.",
+        help="Default repository owner. Used when --repo values don't include 'owner/' prefix.",
     )
     parser.add_argument(
         "--repo",
-        default=default_repo,
-        help="The name of the repository (e.g., 'vscode'). If not specified, defaults to the repo name from the current directory's Git config.",
+        action="append",
+        help="Repository as 'owner/repo' or 'repo' (uses --owner). Can be specified multiple times. Defaults to current git remote.",
     )
     parser.add_argument(
         "--github-token",
@@ -231,6 +231,38 @@ def configure_logging(debug):
             logging.StreamHandler(sys.stderr)  # Log to stderr
         ],
     )
+
+
+def resolve_repos(args) -> list[tuple[str, str]]:
+    """Resolve --repo args into (owner, repo) tuples."""
+    default_owner, default_repo = get_repo_and_owner_from_git()
+
+    repos_arg = args.repo
+    if not repos_arg:
+        owner = args.owner or default_owner
+        repo = default_repo
+        if owner and repo:
+            return [(owner, repo)]
+        return []
+
+    result = []
+    seen = set()
+    for entry in repos_arg:
+        if "/" in entry:
+            owner, repo = entry.split("/", 1)
+        else:
+            owner = args.owner
+            repo = entry
+        if not owner or not repo:
+            raise ValidationError(
+                f"Cannot resolve repository '{entry}': owner is missing. "
+                f"Use 'owner/repo' format or provide --owner."
+            )
+        key = (owner, repo)
+        if key not in seen:
+            seen.add(key)
+            result.append(key)
+    return result
 
 
 def fetch_and_process_pull_requests(
@@ -666,23 +698,37 @@ def generate_markdown_output(args):
         jira_issue_patterns = [jira_issue_patterns]
     # else: already a list from argparse action="append"
 
-    # Fetch and process pull requests
-    pull_requests, jira_issues = fetch_and_process_pull_requests(
-        args.owner,
-        args.repo,
-        args.draft_filter,
-        file_include,
-        file_exclude,
-        args.pr_number,
-        args.url_from_pr_content,
-        jira_client=jira_client,
-        jira_issue_patterns=jira_issue_patterns,
-        jira_include=args.jira_include,
-        jira_metadata_row_pattern=args.jira_metadata_row_pattern,
-        jira_metadata_search_depth=args.jira_metadata_row_search_depth,
-        review_requested_for=args.review_requested_for,
-        github_token=github_token,
-    )
+    # Resolve repos and fetch PRs
+    repos = resolve_repos(args)
+    multi_repo = len(repos) > 1
+
+    if args.pr_number and multi_repo:
+        raise ValidationError("--pr-number cannot be used with multiple repositories.")
+
+    pull_requests = []
+    jira_issues = {}
+    for owner, repo in repos:
+        repo_prs, repo_jira = fetch_and_process_pull_requests(
+            owner,
+            repo,
+            args.draft_filter,
+            file_include,
+            file_exclude,
+            args.pr_number,
+            args.url_from_pr_content,
+            jira_client=jira_client,
+            jira_issue_patterns=jira_issue_patterns,
+            jira_include=args.jira_include,
+            jira_metadata_row_pattern=args.jira_metadata_row_pattern,
+            jira_metadata_search_depth=args.jira_metadata_row_search_depth,
+            review_requested_for=args.review_requested_for,
+            github_token=github_token,
+        )
+        if multi_repo:
+            for pr in repo_prs:
+                pr.repo_name = repo
+        pull_requests.extend(repo_prs)
+        jira_issues.update(repo_jira)
 
     # Add synthetic entries for jira-include issues that weren't found in any PRs
     if args.jira_include and jira_issues:
@@ -784,14 +830,18 @@ def main():
         print(f"ERROR: Failed to parse command line arguments. {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Ensure owner and repo are provided
-    if not args.owner or not args.repo:
-        print("ERROR: Repository owner and name must be specified.", file=sys.stderr)
+    # Ensure at least one repo can be resolved
+    try:
+        repos = resolve_repos(args)
+    except ValidationError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not repos:
+        print("ERROR: Repository must be specified.", file=sys.stderr)
         print(
-            "Either provide --owner and --repo arguments, or run the command",
+            "Use --repo owner/repo, or run from a Git repository with a GitHub remote.",
             file=sys.stderr,
         )
-        print("from within a Git repository with a GitHub remote.", file=sys.stderr)
         sys.exit(1)
 
     configure_logging(args.debug)
